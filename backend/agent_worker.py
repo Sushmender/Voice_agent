@@ -115,7 +115,7 @@ async def entrypoint(ctx: JobContext):
             livekit_url=settings.livekit_url,
             livekit_token=agent_token,
             room_name=room_name,
-            deepgram_api_key=settings.deepgram_api_key,
+            groq_api_key=settings.groq_api_key,
             cartesia_api_key=settings.cartesia_api_key,
             cartesia_voice_id=settings.cartesia_voice_id,
         )
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     # Validate environment before starting
     required_keys = [
         "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET",
-        "DEEPGRAM_API_KEY", "CARTESIA_API_KEY",
+        "GROQ_API_KEY", "CARTESIA_API_KEY",
     ]
     missing = [k for k in required_keys if not os.getenv(k)]
     if missing:
@@ -163,7 +163,7 @@ if __name__ == "__main__":
 
     logger.info("Starting Voice AI Agent Worker...")
     logger.info(f"  LiveKit URL : {settings.livekit_url}")
-    logger.info(f"  ASR         : Deepgram Nova-3")
+    logger.info(f"  ASR         : Groq Whisper (whisper-large-v3-turbo)")
     logger.info(f"  TTS         : Cartesia Sonic")
     logger.info(f"  LLM         : {settings.cerebras_model} (via Cerebras)")
     logger.info(f"  Pipeline    : Pipecat + LiveKit transport")

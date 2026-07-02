@@ -6,12 +6,14 @@
 # ── LiveKit (WebRTC transport + agent worker framework) ───────────────────────
 livekit>=0.17.0
 livekit-agents>=0.11.0
-livekit-plugins-deepgram>=0.6.0
 livekit-plugins-cartesia>=0.4.0
 livekit-plugins-silero>=0.6.0
 
 # ── Pipecat (voice pipeline framework) ───────────────────────────────────────
-pipecat-ai[silero]>=0.0.50
+pipecat-ai[silero,groq]>=0.0.50
+
+# ── Groq (Whisper ASR — generous free tier) ──────────────────────────────────
+groq>=0.9.0
 
 # ── FastAPI (HTTP server: health + token endpoint) ────────────────────────────
 fastapi>=0.111.0

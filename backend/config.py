@@ -28,8 +28,8 @@ class Settings(BaseSettings):
         "voice-agent-bot", description="Agent participant identity in LiveKit"
     )
 
-    # ── Deepgram ──────────────────────────────────────────────────────────────
-    deepgram_api_key: str = Field(..., description="Deepgram Nova-3 API key")
+    # ── Groq (Whisper ASR) ───────────────────────────────────────────────────
+    groq_api_key: str = Field(..., description="Groq API key (used for Whisper ASR via Groq)")
 
     # ── Cartesia ──────────────────────────────────────────────────────────────
     cartesia_api_key: str = Field(..., description="Cartesia Sonic API key")

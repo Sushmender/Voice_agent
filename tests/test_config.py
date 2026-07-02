@@ -14,7 +14,7 @@ _TEST_ENV = {
     "LIVEKIT_URL": "wss://test.livekit.cloud",
     "LIVEKIT_API_KEY": "APItest123456",
     "LIVEKIT_API_SECRET": "test_secret_abcdefghij_long_enough_for_jwt_signing",
-    "DEEPGRAM_API_KEY": "test_deepgram_key",
+    "GROQ_API_KEY": "test_groq_key",
     "CARTESIA_API_KEY": "test_cartesia_key",
 }
 
@@ -36,7 +36,7 @@ class TestConfigLoading:
             "livekit_url",
             "livekit_api_key",
             "livekit_api_secret",
-            "deepgram_api_key",
+            "groq_api_key",
             "cartesia_api_key",
         ]
         for field in required_fields:
@@ -81,7 +81,7 @@ class TestFastAPIApp:
         s.livekit_room_name = "voice-agent-room"
         s.agent_participant_identity = "voice-agent-bot"
         s.cerebras_model = "gpt-oss-120b"
-        s.deepgram_api_key = "test_dg"
+        s.groq_api_key = "test_groq"
         s.cartesia_api_key = "test_ca"
         s.log_level = "INFO"
         return s

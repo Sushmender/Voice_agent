@@ -5,12 +5,12 @@ Day 1: Echo Stub Pipeline
 --------------------------
 Pipecat pipeline using LiveKit transport.
 Architecture:
-    LiveKit audio in → Deepgram STT → [LLM stub] → Cartesia TTS → LiveKit audio out
+    LiveKit audio in → Groq Whisper STT → [LLM stub] → Cartesia TTS → LiveKit audio out
 
 Day 1: The LLM slot is a simple EchoProcessor that replies with a canned message.
        This verifies the full audio path works before we wire in LangGraph (Day 3).
 
-Day 2: Replace stub with real Deepgram STT + Cartesia TTS
+Day 2: Replace stub with real Groq Whisper STT + Cartesia TTS
 Day 3: Replace EchoProcessor with LangGraphLLMService
 
 Run this as a standalone process:
@@ -91,7 +91,7 @@ async def create_voice_pipeline(
     livekit_url: str,
     livekit_token: str,
     room_name: str,
-    deepgram_api_key: str,
+    groq_api_key: str,
     cartesia_api_key: str,
     cartesia_voice_id: str,
 ) -> PipelineTask:
@@ -100,7 +100,7 @@ async def create_voice_pipeline(
 
     Pipeline stages:
         transport.input()   → receive audio from LiveKit room
-        STT service         → Deepgram Nova-3 (streaming speech-to-text)
+        STT service         → Groq Whisper (batch speech-to-text, generous free tier)
         LLM service         → EchoLLMService stub (→ LangGraph on Day 3)
         TTS service         → Cartesia Sonic (text-to-speech)
         transport.output()  → send synthesized audio back to LiveKit room
@@ -109,7 +109,7 @@ async def create_voice_pipeline(
         livekit_url: wss:// URL of LiveKit cloud server.
         livekit_token: JWT participant token for the agent.
         room_name: Name of the LiveKit room to join.
-        deepgram_api_key: Deepgram API key.
+        groq_api_key: Groq API key (for Whisper ASR).
         cartesia_api_key: Cartesia API key.
         cartesia_voice_id: Cartesia voice UUID.
 
@@ -118,11 +118,11 @@ async def create_voice_pipeline(
     """
     # Import pipecat plugins (imported here so missing packages give clear errors)
     try:
-        from pipecat.services.deepgram.stt import DeepgramSTTService
+        from pipecat.services.groq.stt import GroqSTTService
     except ImportError:
         raise ImportError(
-            "pipecat-ai deepgram plugin not installed. "
-            "Run: pip install deepgram-sdk"
+            "pipecat-ai groq plugin not installed. "
+            "Run: pip install 'pipecat-ai[groq]' groq"
         )
 
     try:
@@ -156,17 +156,13 @@ async def create_voice_pipeline(
         ),
     )
 
-    # ── ASR (Day 1: will be real on Day 2, here as placeholder) ─────────────
-    # NOTE: On Day 1 we include the real Deepgram STT — it's just that the
+    # ── ASR (Groq Whisper — generous free tier, ~200–300ms) ─────────────────
+    # NOTE: On Day 1 we include the real Groq Whisper STT — it's just that the
     # EchoLLM will handle it instead of the real LangGraph agent.
-    stt = DeepgramSTTService(
-        api_key=deepgram_api_key,
-        model="nova-3",
-        language="en-US",
-        smart_format=True,
-        interim_results=True,       # stream partial results while speaking
-        utterance_end_ms=1000,      # wait 1s of silence before finalising
-        vad_events=True,
+    stt = GroqSTTService(
+        api_key=groq_api_key,
+        model="whisper-large-v3-turbo",   # fastest Groq Whisper model
+        language="en",
     )
 
     # ── LLM (Day 1: Echo stub) ────────────────────────────────────────────────
@@ -185,7 +181,7 @@ async def create_voice_pipeline(
     pipeline = Pipeline(
         [
             transport.input(),  # receive audio frames from LiveKit
-            stt,                # speech → text (Deepgram)
+            stt,                # speech → text (Groq Whisper)
             llm,                # text → response text (Echo / LangGraph)
             tts,                # response text → audio (Cartesia)
             transport.output(), # send audio frames back to LiveKit
@@ -207,7 +203,7 @@ async def run_pipeline(
     livekit_url: str,
     livekit_token: str,
     room_name: str,
-    deepgram_api_key: str,
+    groq_api_key: str,
     cartesia_api_key: str,
     cartesia_voice_id: str,
 ):
@@ -219,7 +215,7 @@ async def run_pipeline(
         livekit_url=livekit_url,
         livekit_token=livekit_token,
         room_name=room_name,
-        deepgram_api_key=deepgram_api_key,
+        groq_api_key=groq_api_key,
         cartesia_api_key=cartesia_api_key,
         cartesia_voice_id=cartesia_voice_id,
     )
@@ -240,7 +236,7 @@ if __name__ == "__main__":
     Usage:
         python -m backend.pipeline.voice_pipeline
 
-    Requires .env to be configured with LiveKit, Deepgram, and Cartesia keys.
+    Requires .env to be configured with LiveKit, Groq, and Cartesia keys.
     """
     import os
     from dotenv import load_dotenv
@@ -254,7 +250,7 @@ if __name__ == "__main__":
 
     # Validate required env vars
     required = [
-        "LIVEKIT_URL", "DEEPGRAM_API_KEY", "CARTESIA_API_KEY",
+        "LIVEKIT_URL", "GROQ_API_KEY", "CARTESIA_API_KEY",
     ]
     missing = [k for k in required if not os.getenv(k)]
     if missing:
@@ -280,7 +276,7 @@ if __name__ == "__main__":
             livekit_url=data["livekit_url"],
             livekit_token=data["token"],
             room_name=data["room_name"],
-            deepgram_api_key=os.getenv("DEEPGRAM_API_KEY"),
+            groq_api_key=os.getenv("GROQ_API_KEY"),
             cartesia_api_key=os.getenv("CARTESIA_API_KEY"),
             cartesia_voice_id=os.getenv(
                 "CARTESIA_VOICE_ID", "694f9389-aac1-45b6-b726-9d9369183238"
