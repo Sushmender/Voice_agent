@@ -1,4 +1,4 @@
-"""
+﻿"""
 backend/agent_worker.py
 -----------------------
 LiveKit Agents worker — dispatches Pipecat voice pipelines when users join rooms.
@@ -35,7 +35,8 @@ from livekit.agents import (
 )
 
 # ── Local imports ─────────────────────────────────────────────────────────────
-from backend.config import settings
+from backend.config import get_settings
+settings = get_settings()
 from backend.pipeline.voice_pipeline import run_pipeline
 
 load_dotenv()
@@ -176,3 +177,4 @@ if __name__ == "__main__":
             worker_type="voice-agent",
         )
     )
+

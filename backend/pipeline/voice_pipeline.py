@@ -1,17 +1,14 @@
 """
 backend/pipeline/voice_pipeline.py
 ------------------------------------
-Day 1: Echo Stub Pipeline
---------------------------
-Pipecat pipeline using LiveKit transport.
+Day 1: Echo Stub Pipeline (pipecat 1.4.0 compatible)
+------------------------------------------------------
 Architecture:
-    LiveKit audio in → Groq Whisper STT → [LLM stub] → Cartesia TTS → LiveKit audio out
+    LiveKit audio in -> Groq Whisper STT -> EchoLLM stub -> Cartesia TTS -> LiveKit audio out
 
-Day 1: The LLM slot is a simple EchoProcessor that replies with a canned message.
-       This verifies the full audio path works before we wire in LangGraph (Day 3).
-
-Day 2: Replace stub with real Groq Whisper STT + Cartesia TTS
-Day 3: Replace EchoProcessor with LangGraphLLMService
+Day 1: EchoLLMService replies with a canned response to verify the audio path.
+Day 2: Replace stub with real Groq Whisper STT + Cartesia TTS latency tuning.
+Day 3: Replace EchoLLMService with LangGraphLLMService.
 
 Run this as a standalone process:
     python -m backend.pipeline.voice_pipeline
@@ -24,8 +21,8 @@ import time
 
 # Pipecat core
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.workers.runner import WorkerRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask, PipelineWorker
 
 # Pipecat frames
 from pipecat.frames.frames import (
@@ -49,18 +46,22 @@ class EchoLLMService(LLMService):
     Day 1 stub: Echoes back a canned response to prove the pipeline works.
 
     Replace this with LangGraphLLMService in Day 3.
+
+    pipecat 1.4.0 note: Override process_frame() (not _process_frame, which was removed).
     """
 
     def __init__(self):
         super().__init__()
         self._call_count = 0
 
-    async def _process_frame(self, frame: object, direction: FrameDirection):
+    async def process_frame(self, frame: object, direction: FrameDirection):
         """
-        Intercept LLMMessagesFrame, extract the last user message,
+        Intercept LLMMessagesAppendFrame, extract the last user message,
         and push a TextFrame with a canned echo response.
+
+        All other frames are passed through to super().
         """
-        await super()._process_frame(frame, direction)
+        await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMMessagesAppendFrame):
             self._call_count += 1
@@ -94,16 +95,16 @@ async def create_voice_pipeline(
     groq_api_key: str,
     cartesia_api_key: str,
     cartesia_voice_id: str,
-) -> PipelineTask:
+) -> PipelineWorker:
     """
-    Build and return a Pipecat PipelineTask wired to LiveKit transport.
+    Build and return a Pipecat PipelineWorker wired to LiveKit transport.
 
     Pipeline stages:
-        transport.input()   → receive audio from LiveKit room
-        STT service         → Groq Whisper (batch speech-to-text, generous free tier)
-        LLM service         → EchoLLMService stub (→ LangGraph on Day 3)
-        TTS service         → Cartesia Sonic (text-to-speech)
-        transport.output()  → send synthesized audio back to LiveKit room
+        transport.input()   -> receive audio from LiveKit room
+        STT service         -> Groq Whisper (speech-to-text, generous free tier)
+        LLM service         -> EchoLLMService stub (-> LangGraph on Day 3)
+        TTS service         -> Cartesia Sonic (text-to-speech)
+        transport.output()  -> send synthesized audio back to LiveKit room
 
     Args:
         livekit_url: wss:// URL of LiveKit cloud server.
@@ -114,7 +115,7 @@ async def create_voice_pipeline(
         cartesia_voice_id: Cartesia voice UUID.
 
     Returns:
-        Configured PipelineTask ready to run.
+        Configured PipelineWorker ready to run.
     """
     # Import pipecat plugins (imported here so missing packages give clear errors)
     try:
@@ -151,52 +152,59 @@ async def create_voice_pipeline(
             audio_in_enabled=True,
             audio_out_enabled=True,
             vad_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(),    # built-in VAD — no CPU model needed separately
+            vad_analyzer=SileroVADAnalyzer(),    # built-in VAD, no extra model needed
             vad_audio_passthrough=True,
         ),
     )
 
-    # ── ASR (Groq Whisper — generous free tier, ~200–300ms) ─────────────────
-    # NOTE: On Day 1 we include the real Groq Whisper STT — it's just that the
-    # EchoLLM will handle it instead of the real LangGraph agent.
+    # ── ASR (Groq Whisper - generous free tier, ~200-300ms) ───────────────────
+    # NOTE: On Day 1 we include the real Groq Whisper STT - the EchoLLM handles
+    # responses instead of the real LangGraph agent (added Day 3).
+    # Using pipecat 1.4.0 Settings API.
     stt = GroqSTTService(
         api_key=groq_api_key,
-        model="whisper-large-v3-turbo",   # fastest Groq Whisper model
-        language="en",
+        settings=GroqSTTService.Settings(
+            model="whisper-large-v3-turbo",   # fastest Groq Whisper model
+            language="en",
+        ),
     )
 
     # ── LLM (Day 1: Echo stub) ────────────────────────────────────────────────
     llm = EchoLLMService()
 
-    # ── TTS ───────────────────────────────────────────────────────────────────
+    # ── TTS (Cartesia Sonic) ──────────────────────────────────────────────────
+    # CartesiaTTSService.Settings accepts: voice, model, language, generation_config.
+    # Sample rate and encoding are init-level kwargs (not Settings fields).
     tts = CartesiaTTSService(
         api_key=cartesia_api_key,
-        voice_id=cartesia_voice_id,
-        model="sonic-english",       # Cartesia Sonic — fastest model
-        output_format="pcm_s16le",   # PCM 16-bit LE for LiveKit
-        sample_rate=16000,
+        sample_rate=16000,       # PCM at 16kHz for LiveKit compatibility
+        settings=CartesiaTTSService.Settings(
+            voice=cartesia_voice_id,
+            model="sonic-english",   # Cartesia Sonic - fastest model
+        ),
     )
 
     # ── Pipeline ──────────────────────────────────────────────────────────────
     pipeline = Pipeline(
         [
             transport.input(),  # receive audio frames from LiveKit
-            stt,                # speech → text (Groq Whisper)
-            llm,                # text → response text (Echo / LangGraph)
-            tts,                # response text → audio (Cartesia)
+            stt,                # speech -> text (Groq Whisper)
+            llm,                # text -> response text (Echo / LangGraph)
+            tts,                # response text -> audio (Cartesia)
             transport.output(), # send audio frames back to LiveKit
         ]
     )
 
-    task = PipelineTask(
+    # pipecat 1.4.0: use PipelineWorker (PipelineTask is deprecated).
+    # PipelineParams passed as keyword arg (no positional).
+    worker = PipelineWorker(
         pipeline,
-        PipelineParams(
-            allow_interruptions=True,   # user can interrupt mid-response
+        params=PipelineParams(
             enable_metrics=True,        # log latency metrics per stage
         ),
     )
 
-    return task
+    return worker
 
 
 async def run_pipeline(
@@ -211,7 +219,7 @@ async def run_pipeline(
     start_time = time.perf_counter()
     logger.info(f"Starting voice pipeline for room '{room_name}'...")
 
-    task = await create_voice_pipeline(
+    worker = await create_voice_pipeline(
         livekit_url=livekit_url,
         livekit_token=livekit_token,
         room_name=room_name,
@@ -220,8 +228,10 @@ async def run_pipeline(
         cartesia_voice_id=cartesia_voice_id,
     )
 
-    runner = PipelineRunner()
-    await runner.run(task)
+    # pipecat 1.4.0: add_workers() + run() is the idiomatic pattern.
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+    await runner.run()
 
     elapsed = time.perf_counter() - start_time
     logger.info(f"Pipeline for room '{room_name}' ended after {elapsed:.1f}s")
@@ -238,7 +248,6 @@ if __name__ == "__main__":
 
     Requires .env to be configured with LiveKit, Groq, and Cartesia keys.
     """
-    import os
     from dotenv import load_dotenv
 
     load_dotenv()
@@ -258,9 +267,8 @@ if __name__ == "__main__":
         print("Copy .env.example to .env and fill in your keys.")
         sys.exit(1)
 
-    # For standalone mode, we need an agent token from our FastAPI server
+    # For standalone mode, we need an agent token from our FastAPI server.
     # Start FastAPI first: uvicorn backend.main:app --port 8000
-    # Then call: POST http://localhost:8000/api/agent/token
     import httpx
 
     async def main():
