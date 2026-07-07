@@ -12,7 +12,9 @@ This server is the HTTP layer. The voice pipeline runs separately via agent_work
 Run:
     uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 """
+import asyncio
 import logging
+import pathlib
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -20,11 +22,15 @@ from datetime import timedelta
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.config import get_settings
 
 settings = get_settings()
+
+# ── Pipeline import (lazy-ish to avoid pipecat startup logs at module import) ─
+from backend.pipeline.voice_pipeline import run_pipeline
 
 
 # ── LiveKit token generation ──────────────────────────────────────────────────
@@ -36,6 +42,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Room → asyncio.Task mapping; prevents duplicate agents per room
+_active_pipelines: dict[str, asyncio.Task] = {}
+
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -43,6 +52,22 @@ async def lifespan(app: FastAPI):
     logger.info("Voice AI Agent API starting up...")
     logger.info(f"LiveKit URL: {settings.livekit_url}")
     yield
+    # Cancel all running pipeline tasks on shutdown
+    logger.info("Cancelling active pipeline tasks...")
+    tasks_to_await = []
+    for room, task in list(_active_pipelines.items()):
+        if not task.done():
+            task.cancel()
+            tasks_to_await.append(task)
+    if tasks_to_await:
+        logger.info(f"Waiting for {len(tasks_to_await)} tasks to clean up...")
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks_to_await, return_exceptions=True),
+                timeout=1.5
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Pipeline cleanup timed out. Forcing shutdown.")
     logger.info("Voice AI Agent API shutting down...")
 
 
@@ -138,7 +163,8 @@ async def health_check():
 async def get_participant_token(request: TokenRequest):
     """
     Generate a LiveKit JWT for a browser user to join the voice room.
-    Called by the frontend before opening the microphone.
+    Also auto-launches the Pipecat voice pipeline for that room if not already running.
+    This means you only need FastAPI running — no separate agent_worker needed.
     """
     identity = request.participant_identity or f"user-{uuid.uuid4().hex[:8]}"
     try:
@@ -150,6 +176,27 @@ async def get_participant_token(request: TokenRequest):
             can_subscribe=True,
         )
         logger.info(f"Generated browser token for '{identity}' in room '{request.room_name}'")
+
+        # ── Auto-launch Pipecat pipeline for this room ───────────────────────────
+        room_name = request.room_name
+        existing = _active_pipelines.get(room_name)
+        if existing is None or existing.done():
+            agent_token = _create_token(
+                room_name=room_name,
+                participant_identity=settings.agent_participant_identity,
+                participant_name="Voice AI Agent",
+                can_publish=True,
+                can_subscribe=True,
+            )
+            task = asyncio.create_task(
+                _run_pipeline_task(room_name, agent_token),
+                name=f"pipeline-{room_name}",
+            )
+            _active_pipelines[room_name] = task
+            logger.info(f"[Pipeline] Launched agent for room '{room_name}'")
+        else:
+            logger.info(f"[Pipeline] Agent already running for room '{room_name}'")
+
         return TokenResponse(
             token=token,
             livekit_url=settings.livekit_url,
@@ -159,6 +206,27 @@ async def get_participant_token(request: TokenRequest):
     except Exception as e:
         logger.error(f"Token generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Token generation failed: {str(e)}")
+
+
+async def _run_pipeline_task(room_name: str, agent_token: str):
+    """Background asyncio task: run the Pipecat pipeline until the room empties."""
+    logger.info(f"[Pipeline] Starting for room '{room_name}'...")
+    try:
+        await run_pipeline(
+            livekit_url=settings.livekit_url,
+            livekit_token=agent_token,
+            room_name=room_name,
+            groq_api_key=settings.groq_api_key,
+            cartesia_api_key=settings.cartesia_api_key,
+            cartesia_voice_id=settings.cartesia_voice_id,
+        )
+    except asyncio.CancelledError:
+        logger.info(f"[Pipeline] Cancelled for room '{room_name}'")
+    except Exception as exc:
+        logger.error(f"[Pipeline] Error in room '{room_name}': {exc}", exc_info=True)
+    finally:
+        _active_pipelines.pop(room_name, None)
+        logger.info(f"[Pipeline] Ended for room '{room_name}'")
 
 
 @app.post("/api/agent/token", response_model=TokenResponse, summary="Get agent participant token")
@@ -186,3 +254,17 @@ async def get_agent_token(room_name: str = "voice-agent-room"):
     except Exception as e:
         logger.error(f"Agent token generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Agent token generation failed: {str(e)}")
+
+
+# ── Test client (browser UI) ──────────────────────────────────────────────────
+_TEST_CLIENT_HTML = pathlib.Path(__file__).resolve().parent.parent / "test_client.html"
+
+@app.get("/test", include_in_schema=False)
+async def test_client():
+    """
+    Serve the voice-agent browser test client at http://localhost:8000/test
+    No OpenAI key needed — connects to your own LiveKit room via your API token.
+    """
+    if not _TEST_CLIENT_HTML.exists():
+        raise HTTPException(status_code=404, detail="test_client.html not found in project root")
+    return FileResponse(_TEST_CLIENT_HTML, media_type="text/html")

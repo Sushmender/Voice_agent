@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Agent — Test Client</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d0f14;
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      color: #e2e8f0;
+    }
+
+    .card {
+      background: #161b27;
+      border: 1px solid #1e2a3a;
+      border-radius: 20px;
+      padding: 40px 48px;
+      width: 420px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 6px;
+      color: #f0f4ff;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: #5a6880;
+      margin-bottom: 32px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #7a8aa0;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0d1018;
+      border: 1px solid #1e2a3a;
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color .2s;
+      margin-bottom: 18px;
+    }
+    input:focus { border-color: #3b82f6; }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .1s, opacity .2s;
+      margin-top: 4px;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-connect {
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      color: #fff;
+    }
+    .btn-disconnect {
+      background: #1e2a3a;
+      color: #ef4444;
+      border: 1px solid #2d3a50;
+      display: none;
+    }
+
+    /* Status pill */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 20px 0 0;
+      font-size: 0.82rem;
+      color: #5a6880;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #1e2a3a;
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    .dot.connecting { background: #f59e0b; animation: pulse 1s infinite; }
+    .dot.connected  { background: #22c55e; }
+    .dot.error      { background: #ef4444; }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: .3; }
+    }
+
+    /* Audio visualiser bar */
+    .visualiser {
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 3px;
+      height: 40px;
+      margin-top: 22px;
+    }
+    .visualiser.active { display: flex; }
+    .bar {
+      width: 4px;
+      border-radius: 2px;
+      background: linear-gradient(#6366f1, #3b82f6);
+      animation: bounce 0.8s ease-in-out infinite;
+      min-height: 4px;
+    }
+    .bar:nth-child(1) { animation-delay: 0.0s; }
+    .bar:nth-child(2) { animation-delay: 0.1s; }
+    .bar:nth-child(3) { animation-delay: 0.2s; }
+    .bar:nth-child(4) { animation-delay: 0.3s; }
+    .bar:nth-child(5) { animation-delay: 0.4s; }
+    .bar:nth-child(6) { animation-delay: 0.3s; }
+    .bar:nth-child(7) { animation-delay: 0.2s; }
+    .bar:nth-child(8) { animation-delay: 0.1s; }
+    @keyframes bounce {
+      0%,100% { height: 4px; }
+      50%      { height: 32px; }
+    }
+
+    /* Transcript */
+    .transcript-box {
+      margin-top: 20px;
+      background: #0d1018;
+      border: 1px solid #1e2a3a;
+      border-radius: 10px;
+      padding: 12px 14px;
+      min-height: 80px;
+      max-height: 160px;
+      overflow-y: auto;
+      font-size: 0.82rem;
+      color: #94a3b8;
+      line-height: 1.6;
+      display: none;
+    }
+    .transcript-box.show { display: block; }
+    .transcript-box p { margin-bottom: 4px; }
+    .transcript-box .agent { color: #6366f1; }
+    .transcript-box .user  { color: #22c55e; }
+
+    .err-msg {
+      margin-top: 14px;
+      font-size: 0.78rem;
+      color: #ef4444;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>🎙️ Voice Agent Test Client</h1>
+  <p class="subtitle">Connects to your local FastAPI + LiveKit agent</p>
+
+  <label for="apiUrl">FastAPI Server URL</label>
+  <input id="apiUrl" value="http://localhost:8000" />
+
+  <label for="roomName">Room Name</label>
+  <input id="roomName" value="voice-agent-room" />
+
+  <label for="userName">Your Name</label>
+  <input id="userName" value="tester" />
+
+  <button id="connectBtn" class="btn btn-connect" onclick="connect()">Connect to Agent</button>
+  <button id="disconnectBtn" class="btn btn-disconnect" onclick="disconnect()">Disconnect</button>
+
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">Not connected</span>
+  </div>
+
+  <div class="visualiser" id="visualiser">
+    <div class="bar" style="height:8px"></div>
+    <div class="bar" style="height:16px"></div>
+    <div class="bar" style="height:24px"></div>
+    <div class="bar" style="height:32px"></div>
+    <div class="bar" style="height:28px"></div>
+    <div class="bar" style="height:20px"></div>
+    <div class="bar" style="height:12px"></div>
+    <div class="bar" style="height:6px"></div>
+  </div>
+
+  <div class="transcript-box" id="transcript"></div>
+  <div class="err-msg" id="errMsg"></div>
+</div>
+
+<!-- LiveKit JS SDK (browser build) -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.x/dist/livekit-client.umd.min.js"></script>
+<script>
+  let room = null;
+
+  function setStatus(cls, text) {
+    const dot = document.getElementById('dot');
+    dot.className = 'dot ' + cls;
+    document.getElementById('statusText').textContent = text;
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function addTranscript(speaker, text) {
+    const box = document.getElementById('transcript');
+    box.classList.add('show');
+    const p = document.createElement('p');
+    p.className = speaker;
+    p.textContent = (speaker === 'agent' ? '🤖 Agent: ' : '🧑 You: ') + text;
+    box.appendChild(p);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function connect() {
+    const apiUrl  = document.getElementById('apiUrl').value.trim().replace(/\/$/, '');
+    const roomName = document.getElementById('roomName').value.trim();
+    const userName = document.getElementById('userName').value.trim() || 'tester';
+
+    document.getElementById('errMsg').style.display = 'none';
+    setStatus('connecting', 'Fetching token…');
+
+    // 1. Get a participant token from your FastAPI server
+    let tokenData;
+    try {
+      const res = await fetch(`${apiUrl}/api/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room_name: roomName, participant_name: userName }),
+      });
+      if (!res.ok) throw new Error(`Token API returned ${res.status}`);
+      tokenData = await res.json();
+    } catch (e) {
+      setStatus('error', 'Failed to fetch token');
+      showError('Could not reach FastAPI server. Is it running on ' + apiUrl + '? Error: ' + e.message);
+      return;
+    }
+
+    setStatus('connecting', 'Connecting to LiveKit…');
+
+    // 2. Connect to LiveKit room
+    room = new LivekitClient.Room({
+      adaptiveStream: true,
+      dynacast: true,
+    });
+
+    room.on(LivekitClient.RoomEvent.Connected, () => {
+      setStatus('connected', `Connected — room: ${roomName}`);
+      document.getElementById('connectBtn').style.display = 'none';
+      document.getElementById('disconnectBtn').style.display = 'block';
+      document.getElementById('visualiser').classList.add('active');
+      addTranscript('agent', '(waiting for agent to join the room…)');
+    });
+
+    room.on(LivekitClient.RoomEvent.Disconnected, () => {
+      setStatus('', 'Disconnected');
+      document.getElementById('connectBtn').style.display = 'block';
+      document.getElementById('disconnectBtn').style.display = 'none';
+      document.getElementById('visualiser').classList.remove('active');
+    });
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      if (track.kind === LivekitClient.Track.Kind.Audio) {
+        track.attach();   // plays agent audio through the browser speaker
+        addTranscript('agent', '(agent audio connected — speak now!)');
+      }
+    });
+
+    room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(payload));
+        if (msg.type === 'transcript') {
+          if (msg.role === 'user')  addTranscript('user',  msg.text);
+          if (msg.role === 'agent') addTranscript('agent', msg.text);
+        }
+      } catch (_) {}
+    });
+
+    try {
+      await room.connect(tokenData.livekit_url, tokenData.token);
+      // Enable microphone so the agent can hear you
+      await room.localParticipant.setMicrophoneEnabled(true);
+    } catch (e) {
+      setStatus('error', 'Connection failed');
+      showError('LiveKit connection error: ' + e.message);
+    }
+  }
+
+  async function disconnect() {
+    if (room) {
+      await room.disconnect();
+      room = null;
+    }
+  }
+</script>
+</body>
+</html>

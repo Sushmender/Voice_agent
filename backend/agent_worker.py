@@ -1,4 +1,4 @@
-﻿"""
+"""
 backend/agent_worker.py
 -----------------------
 LiveKit Agents worker — dispatches Pipecat voice pipelines when users join rooms.
@@ -19,6 +19,7 @@ Requires:
 import asyncio
 import logging
 import os
+import pathlib
 import sys
 
 import httpx
@@ -30,6 +31,7 @@ from livekit.agents import (
     JobContext,
     JobProcess,
     WorkerOptions,
+    WorkerType,
     cli,
     metrics,
 )
@@ -111,6 +113,10 @@ async def entrypoint(ctx: JobContext):
 
     # Launch Pipecat voice pipeline in this room
     logger.info(f"[Agent] Launching Pipecat voice pipeline for room '{room_name}'...")
+
+    # Retrieve pre-warmed VAD analyzer from prewarm() (Day 2)
+    vad_analyzer = getattr(ctx.proc, "userdata", {}).get("vad_analyzer")
+
     try:
         await run_pipeline(
             livekit_url=settings.livekit_url,
@@ -119,6 +125,7 @@ async def entrypoint(ctx: JobContext):
             groq_api_key=settings.groq_api_key,
             cartesia_api_key=settings.cartesia_api_key,
             cartesia_voice_id=settings.cartesia_voice_id,
+            vad_analyzer=vad_analyzer,
         )
     except Exception as e:
         logger.error(f"[Agent] Pipeline error in room '{room_name}': {e}", exc_info=True)
@@ -128,14 +135,30 @@ async def entrypoint(ctx: JobContext):
 
 def prewarm(proc: JobProcess):
     """
-    Pre-warm any resources before the first job arrives.
+    Pre-warm resources before the first job arrives.
     Called once when the worker process starts.
 
-    We can pre-load models or establish connections here to reduce
-    the latency on the first job dispatch.
+    Day 2: Pre-load the Silero VAD model so it is ready when the first room
+    join fires. The model (~8 MB) takes ~500 ms on first load; pre-warming
+    removes this latency from the first conversation turn.
     """
     logger.info("[Worker] Pre-warming agent resources...")
-    # TODO (Day 2): Pre-load Silero VAD model here so it's ready instantly
+
+    # Pre-load Silero VAD into process userdata so entrypoint can reuse it
+    try:
+        from pipecat.audio.vad.silero import SileroVADAnalyzer
+        try:
+            from pipecat.audio.vad.vad_analyzer import VADParams
+            proc.userdata["vad_analyzer"] = SileroVADAnalyzer(
+                params=VADParams(stop_secs=0.8)
+            )
+        except (ImportError, TypeError):
+            proc.userdata["vad_analyzer"] = SileroVADAnalyzer()
+        logger.info("[Worker] Silero VAD model pre-loaded (stop_secs=0.8).")
+    except Exception as exc:
+        logger.warning(f"[Worker] VAD pre-warm failed (non-fatal): {exc}")
+        proc.userdata["vad_analyzer"] = None
+
     # TODO (Day 3): Pre-initialise LangGraph agent and Cerebras client
     logger.info("[Worker] Pre-warm complete.")
 
@@ -173,8 +196,8 @@ if __name__ == "__main__":
         WorkerOptions(
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
-            # Worker identity shown in LiveKit Cloud dashboard
-            worker_type="voice-agent",
+            # WorkerType.ROOM = dispatch a job per room join (livekit-agents v1.x)
+            worker_type=WorkerType.ROOM,
         )
     )
 
