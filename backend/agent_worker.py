@@ -126,6 +126,7 @@ async def entrypoint(ctx: JobContext):
             cartesia_api_key=settings.cartesia_api_key,
             cartesia_voice_id=settings.cartesia_voice_id,
             vad_analyzer=vad_analyzer,
+            session_id=room_name,   # Day 3: key short-term memory per room
         )
     except Exception as e:
         logger.error(f"[Agent] Pipeline error in room '{room_name}': {e}", exc_info=True)
@@ -159,7 +160,15 @@ def prewarm(proc: JobProcess):
         logger.warning(f"[Worker] VAD pre-warm failed (non-fatal): {exc}")
         proc.userdata["vad_analyzer"] = None
 
-    # TODO (Day 3): Pre-initialise LangGraph agent and Cerebras client
+    # Day 3: Pre-compile the LangGraph agent graph so the first voice turn
+    # doesn't pay the ~20-50 ms compilation cost.
+    try:
+        from backend.agent.graph import get_agent_graph
+        get_agent_graph()   # compiles and caches the StateGraph
+        logger.info("[Worker] LangGraph agent graph pre-compiled.")
+    except Exception as exc:
+        logger.warning(f"[Worker] LangGraph pre-warm failed (non-fatal): {exc}")
+
     logger.info("[Worker] Pre-warm complete.")
 
 

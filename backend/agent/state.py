@@ -17,10 +17,12 @@ class AgentState(TypedDict):
         messages:     Full conversation history (HumanMessage / AIMessage).
                       Uses add_messages reducer to append rather than replace.
         session_id:   Unique identifier for this conversation session.
+        user_input:   The latest user utterance (injected before memory load).
         tool_output:  Output from the last MCP tool call (if any).
         response:     Final response text to be sent to TTS.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     session_id: str
+    user_input: str
     tool_output: str
     response: str

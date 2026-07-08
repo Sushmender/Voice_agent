@@ -1,20 +1,20 @@
 """
 backend/pipeline/voice_pipeline.py
 ------------------------------------
-Day 2: Full ASR + VAD + TTS Pipeline  (pipecat 1.4.0 compatible)
------------------------------------------------------------------
+Day 3: LangGraph Agent + Cerebras LLM + Short-term Memory  (pipecat 1.4.0)
+---------------------------------------------------------------------------
 Architecture:
     LiveKit audio in
     → SileroVAD  (end-of-speech detection, stop_secs=0.8 s)
     → Groq Whisper STT  (whisper-large-v3-turbo, ~200-300 ms)
     → LatencyLoggerProcessor  (per-stage timing, passthrough)
-    → EchoLLMService stub  (Day 1 echo — replaced with LangGraph Day 3)
+    → LangGraphLLMService  (LangGraph graph: load_memory→llm_node→save_memory)
     → Cartesia Sonic TTS  (streaming chunks, first chunk ~90 ms)
     → LiveKit audio out
 
 Day 1: EchoLLMService echoes a canned reply → proves the audio path works.
 Day 2: LatencyLogger added; VAD threshold tuned; prewarm pre-loads VAD.
-Day 3: Replace EchoLLMService with LangGraphLLMService.
+Day 3: EchoLLMService replaced with LangGraphLLMService (Cerebras + memory).
 
 Run as standalone:
     python -m backend.pipeline.voice_pipeline
@@ -37,6 +37,7 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMMessagesAppendFrame,
     TextFrame,
+    TranscriptionFrame,
 )
 
 # Pipecat processors
@@ -46,12 +47,19 @@ from pipecat.services.llm_service import LLMService
 logger = logging.getLogger(__name__)
 
 
-# ── Echo LLM Processor (Day 1 stub) ──────────────────────────────────────────
+# Day 3: Lazy wrapper so tests can patch 'backend.pipeline.voice_pipeline._run_agent_turn'
+# without triggering the full agent import at module load time.
+async def _run_agent_turn(session_id: str, user_text: str) -> str:
+    """Thin wrapper around backend.agent.graph.run_agent_turn (imported lazily)."""
+    from backend.agent.graph import run_agent_turn
+    return await run_agent_turn(session_id=session_id, user_text=user_text)
+
+
+# ── Echo LLM Processor (Day 1 stub — kept for reference) ────────────────────
 class EchoLLMService(LLMService):
     """
     Day 1 stub: Echoes back a canned response to prove the pipeline works.
-
-    Replace this with LangGraphLLMService in Day 3.
+    Superseded by LangGraphLLMService in Day 3 — kept for easy rollback.
 
     pipecat 1.4.0 note: Override process_frame() (not _process_frame, which was removed).
     """
@@ -73,7 +81,6 @@ class EchoLLMService(LLMService):
 
         if isinstance(frame, LLMMessagesAppendFrame):
             self._call_count += 1
-            # Extract last user message from conversation history
             user_text = ""
             for msg in reversed(frame.messages):
                 if isinstance(msg, dict) and msg.get("role") == "user":
@@ -81,21 +88,92 @@ class EchoLLMService(LLMService):
                     break
 
             logger.info(f"[EchoLLM] Turn #{self._call_count} | User said: '{user_text}'")
-
-            # Signal TTS that a response is starting
             await self.push_frame(LLMFullResponseStartFrame())
-            # Push echo response text (TTS will convert this to audio)
             echo_response = (
                 f"Echo pipeline working. I heard you say: {user_text}. "
-                f"This is turn number {self._call_count}. "
-                f"The real LangGraph agent will be connected on Day 3."
+                f"This is turn number {self._call_count}."
             )
             await self.push_frame(TextFrame(echo_response))
-            # Signal TTS that response is complete
             await self.push_frame(LLMFullResponseEndFrame())
         else:
-            # Forward everything else (StartFrame, audio frames, VAD events, etc.)
             await self.push_frame(frame, direction)
+
+
+# ── LangGraph LLM Processor (Day 3) ──────────────────────────────────────────
+class LangGraphLLMService(LLMService):
+    """
+    Day 3: Replaces EchoLLMService.
+
+    On each LLMMessagesAppendFrame this processor:
+      1. Extracts the latest user utterance from the frame.
+      2. Calls run_agent_turn(session_id, user_text) which drives the full
+         LangGraph pipeline: load_memory → llm_node (Cerebras) → save_memory.
+      3. Pushes the LLM response as streaming TextFrames to Cartesia TTS.
+
+    pipecat 1.4.0 note: Override process_frame() — not _process_frame.
+    """
+
+    def __init__(self, session_id: str = "default"):
+        super().__init__()
+        self._session_id = session_id
+        self._call_count = 0
+
+    async def process_frame(self, frame: object, direction: FrameDirection):
+        """
+        Intercept TranscriptionFrame (from STT) and route it through the LangGraph agent.
+        All other frames are forwarded unchanged.
+        """
+        await super().process_frame(frame, direction)
+
+        user_text = ""
+        if isinstance(frame, TranscriptionFrame):
+            user_text = frame.text.strip()
+        elif isinstance(frame, LLMMessagesAppendFrame):
+            for msg in reversed(frame.messages):
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    user_text = msg.get("content", "").strip()
+                    break
+        else:
+            # Forward all non-LLM/STT frames (StartFrame, audio, VAD events, etc.)
+            await self.push_frame(frame, direction)
+            return
+
+        if not user_text:
+            logger.warning(
+                f"[LangGraphLLM] Turn #{self._call_count + 1}: no user text found, skipping."
+            )
+            return
+
+        self._call_count += 1
+
+        logger.info(
+            f"[LangGraphLLM] Turn #{self._call_count} | "
+            f"Session '{self._session_id}' | User: '{user_text[:60]}'"
+        )
+
+        # ── Run LangGraph agent turn ──────────────────────────────────
+        try:
+            response_text = await _run_agent_turn(
+                session_id=self._session_id,
+                user_text=user_text,
+            )
+        except Exception as exc:
+            logger.error(
+                f"[LangGraphLLM] Agent error (turn #{self._call_count}): {exc}",
+                exc_info=True,
+            )
+            from backend.agent.prompts import TOOL_ERROR_MESSAGE
+            response_text = TOOL_ERROR_MESSAGE
+
+        logger.info(
+            f"[LangGraphLLM] Turn #{self._call_count} | "
+            f"Response: '{response_text[:80]}'"
+        )
+
+        # ── Stream response to TTS ────────────────────────────────────
+        await self.push_frame(LLMFullResponseStartFrame())
+        await self.push_frame(TextFrame(response_text))
+        await self.push_frame(LLMFullResponseEndFrame())
 
 
 
@@ -108,16 +186,17 @@ async def create_voice_pipeline(
     cartesia_api_key: str,
     cartesia_voice_id: str,
     vad_analyzer=None,      # Day 2: accept pre-warmed VAD from prewarm()
+    session_id: str | None = None,  # Day 3: session key for short-term memory
 ) -> PipelineWorker:
     """
     Build and return a Pipecat PipelineWorker wired to LiveKit transport.
 
-    Pipeline stages (Day 2):
+    Pipeline stages (Day 3):
         transport.input()       -> receive audio frames from LiveKit
         SileroVAD               -> end-of-speech detection (stop_secs=0.8)
         STT service             -> Groq Whisper whisper-large-v3-turbo
         LatencyLoggerProcessor  -> per-stage timing (passthrough)
-        LLM service             -> EchoLLMService stub (LangGraph on Day 3)
+        LLM service             -> LangGraphLLMService (Cerebras + memory)
         TTS service             -> Cartesia Sonic (streaming chunks)
         transport.output()      -> send synthesized audio back to LiveKit
 
@@ -129,6 +208,7 @@ async def create_voice_pipeline(
         cartesia_api_key: Cartesia API key.
         cartesia_voice_id: Cartesia voice UUID.
         vad_analyzer: Optional pre-warmed SileroVADAnalyzer from prewarm().
+        session_id: Session key used by short-term memory (defaults to room_name).
 
     Returns:
         Configured PipelineWorker ready to run.
@@ -208,8 +288,10 @@ async def create_voice_pipeline(
     from backend.pipeline.latency_logger import LatencyLoggerProcessor
     latency_logger = LatencyLoggerProcessor()
 
-    # ── LLM (Day 1: Echo stub — replaced Day 3) ──────────────────────────────
-    llm = EchoLLMService()
+    # ── LLM (Day 3: LangGraph agent — Cerebras + short-term memory) ───────────
+    _session_id = session_id or room_name
+    llm = LangGraphLLMService(session_id=_session_id)
+    logger.info(f"[Pipeline] LangGraph agent initialised for session '{_session_id}'")
 
     # ── TTS (Cartesia Sonic) ──────────────────────────────────────────────────
     # CartesiaTTSService.Settings accepts: voice, model, language, generation_config.
@@ -219,19 +301,19 @@ async def create_voice_pipeline(
         sample_rate=16000,       # PCM at 16kHz for LiveKit compatibility
         settings=CartesiaTTSService.Settings(
             voice=cartesia_voice_id,
-            model="sonic-english",   # Cartesia Sonic - fastest model
+            model="sonic-3.5",   # 'sonic' and 'sonic-english' were sunsetted in June 2026
         ),
     )
 
-    # ── Pipeline (Day 2: LatencyLoggerProcessor inserted between STT and LLM) ─
+    # ── Pipeline (Day 3: LangGraphLLMService replaces Echo stub) ───────────────
     pipeline = Pipeline(
         [
             transport.input(),  # receive audio frames from LiveKit
-            vad_processor,      # 🎙️ VAD stage: processes audio, emits VAD speech frames
-            stt,                # speech -> text  (Groq Whisper)
-            latency_logger,     # 📊 per-stage timing (passthrough, Day 2)
-            llm,                # text -> response text (Echo stub / LangGraph)
-            tts,                # response text -> audio (Cartesia Sonic)
+            vad_processor,      # 🎙️ VAD: end-of-speech detection (Silero)
+            stt,                # speech → text  (Groq Whisper)
+            latency_logger,     # 📊 per-stage timing (passthrough)
+            llm,                # text → response text (LangGraph + Cerebras)
+            tts,                # response text → audio (Cartesia Sonic)
             transport.output(), # send audio frames back to LiveKit
         ]
     )
@@ -256,6 +338,7 @@ async def run_pipeline(
     cartesia_api_key: str,
     cartesia_voice_id: str,
     vad_analyzer=None,      # Day 2: forwarded from agent_worker prewarm()
+    session_id: str | None = None,  # Day 3: short-term memory session key
 ):
     """Entry point to run the pipeline until the room is empty or an error occurs."""
     start_time = time.perf_counter()
@@ -269,10 +352,11 @@ async def run_pipeline(
         cartesia_api_key=cartesia_api_key,
         cartesia_voice_id=cartesia_voice_id,
         vad_analyzer=vad_analyzer,
+        session_id=session_id or room_name,
     )
 
     # pipecat 1.4.0: add_workers() + run() is the idiomatic pattern.
-    runner = WorkerRunner()
+    runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
     try:
         await runner.run()
