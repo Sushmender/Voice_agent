@@ -21,9 +21,10 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from backend.config import settings
+from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def _get_client():

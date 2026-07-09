@@ -14,6 +14,11 @@ import asyncio
 import logging
 from typing import Optional
 
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,9 +35,10 @@ async def web_search(query: str, max_results: int = 3) -> str:
     """
     logger.info(f"[WebSearch] Query: '{query}'")
 
-    try:
-        from duckduckgo_search import DDGS
+    if DDGS is None:
+        return "The web search tool is not available. Please install duckduckgo-search."
 
+    try:
         # Run synchronous DDGS in a thread to avoid blocking the event loop
         def _search():
             with DDGS() as ddgs:
@@ -64,8 +70,6 @@ async def web_search(query: str, max_results: int = 3) -> str:
         logger.info(f"[WebSearch] Found {len(results)} results")
         return response
 
-    except ImportError:
-        return "The web search tool is not available. Please install duckduckgo-search."
     except Exception as e:
         logger.error(f"[WebSearch] Error: {e}")
         return f"I ran into an issue searching for '{query}'. Please try again."
@@ -84,9 +88,10 @@ async def news_search(topic: str, max_results: int = 3) -> str:
     """
     logger.info(f"[NewsSearch] Topic: '{topic}'")
 
-    try:
-        from duckduckgo_search import DDGS
+    if DDGS is None:
+        return "The web search tool is not available. Please install duckduckgo-search."
 
+    try:
         def _search():
             with DDGS() as ddgs:
                 results = list(ddgs.news(

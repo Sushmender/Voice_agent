@@ -3,15 +3,19 @@ backend/agent/nodes.py
 ----------------------
 LangGraph node functions for the voice AI agent.
 
-Nodes
------
-load_memory  : Pull conversation history from short-term memory into AgentState.
-llm_node     : Call Cerebras LLM (OpenAI-compatible API) to generate a response.
-save_memory  : Persist the new human + assistant messages back to short-term memory.
+Nodes (Day 4)
+-------------
+load_memory             : Pull conversation history into AgentState.
+llm_node                : Call Cerebras LLM; detect tool-call intent via
+                          OpenAI function-calling (with prompt fallback).
+tool_node               : Execute the requested tool and store result.
+format_tool_response    : Re-call LLM with tool output to produce final answer.
+save_memory             : Persist the new exchange back to short-term memory.
 
 Cerebras uses an OpenAI-compatible REST API, so we use the `openai` client
-pointed at the Cerebras base URL. No custom SDK needed.
+pointed at the Cerebras base URL.
 """
+import json
 import logging
 from typing import Any
 
@@ -23,6 +27,107 @@ from backend.config import get_settings
 import backend.memory.short_term as memory
 
 logger = logging.getLogger(__name__)
+
+# ── Tool schema (OpenAI function-calling format) ──────────────────────────────
+TOOLS_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current weather for a city.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name, e.g. 'Paris'"},
+                },
+                "required": ["city"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate",
+            "description": "Evaluate a mathematical expression. Use for any arithmetic, algebra, or math calculations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "Math expression, e.g. '13 * 19' or 'sqrt(144)'",
+                    },
+                },
+                "required": ["expression"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web using DuckDuckGo for current information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Number of results (default 3)",
+                        "default": 3,
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_note",
+            "description": "Save a personal note to Notion.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Short title/summary of the note"},
+                    "content": {"type": "string", "description": "Full note content"},
+                },
+                "required": ["title", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_notes",
+            "description": "Search personal notes saved in Notion.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search term"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_notes",
+            "description": "List the most recently saved Notion notes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max notes to list (default 5)",
+                        "default": 5,
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+]
 
 
 def _get_cerebras_client():
@@ -41,64 +146,53 @@ def load_memory(state: AgentState) -> dict[str, Any]:
     Node: load_memory
     -----------------
     Retrieve short-term session history and append the latest user utterance.
-    This guarantees chronological order: [old1, old2, ..., new_user_msg].
     """
     session_id = state.get("session_id", "default")
     user_input = state.get("user_input", "")
-    
+
     history = memory.get_history(session_id)
     if user_input:
         history.append(HumanMessage(content=user_input))
-        
+
     logger.debug(
         f"[load_memory] Session '{session_id}': loaded {len(history)} messages"
     )
-    return {"messages": history}
+    return {"messages": history, "tool_name": "", "tool_args": {}, "tool_output": ""}
 
 
 async def llm_node(state: AgentState) -> dict[str, Any]:
     """
     Node: llm_node
     --------------
-    Call the Cerebras LLM to generate a response given the current conversation.
+    Call the Cerebras LLM with tool schemas.
 
-    Builds an OpenAI-compatible messages list from:
-        [SystemMessage, ...history, last HumanMessage]
-
-    The response text is stored in state["response"] for downstream use
-    (TTS pickup), and also appended as an AIMessage to state["messages"].
-
-    Args:
-        state: Current AgentState with messages populated.
+    If the LLM returns a tool_call → store tool_name + tool_args in state.
+    If the LLM returns a plain text response → store as response directly.
 
     Returns:
-        Partial state dict with `response` and an appended AIMessage.
+        Partial state dict with tool_name/tool_args OR response populated.
     """
     settings = get_settings()
     session_id = state.get("session_id", "default")
     messages = list(state.get("messages", []))
 
-    # ── Build the messages list for the Cerebras API ──────────────────────────
+    # Build the messages list for the Cerebras API
     api_messages = [{"role": "system", "content": VOICE_AGENT_SYSTEM_PROMPT}]
-
     for msg in messages:
         if isinstance(msg, HumanMessage):
             api_messages.append({"role": "user", "content": str(msg.content)})
         elif isinstance(msg, AIMessage):
             api_messages.append({"role": "assistant", "content": str(msg.content)})
         elif isinstance(msg, SystemMessage):
-            # Skip — system prompt already prepended above
-            pass
+            pass  # system prompt already prepended
 
     if not api_messages or api_messages[-1]["role"] != "user":
-        # No user message — return fallback
-        logger.warning(
-            f"[llm_node] Session '{session_id}': no user message found, "
-            "returning fallback."
-        )
+        logger.warning(f"[llm_node] Session '{session_id}': no user message, returning fallback.")
         return {
             "response": FALLBACK_MESSAGE,
             "messages": [AIMessage(content=FALLBACK_MESSAGE)],
+            "tool_name": "",
+            "tool_args": {},
         }
 
     logger.info(
@@ -106,26 +200,202 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
         f"({settings.cerebras_model}) with {len(api_messages)} messages"
     )
 
-    # ── Call Cerebras ─────────────────────────────────────────────────────────
     try:
         client = _get_cerebras_client()
-        completion = await client.chat.completions.create(
-            model=settings.cerebras_model,
-            messages=api_messages,
-            max_tokens=256,     # keep responses short for voice
-            temperature=0.7,
-        )
-        response_text = completion.choices[0].message.content.strip()
 
-        logger.info(
-            f"[llm_node] Session '{session_id}': response = '{response_text[:80]}...'"
-        )
+        # Try with tool-calling first
+        try:
+            completion = await client.chat.completions.create(
+                model=settings.cerebras_model,
+                messages=api_messages,
+                tools=TOOLS_SCHEMA,
+                tool_choice="auto",
+                max_tokens=512,
+                temperature=0.7,
+            )
+
+            choice = completion.choices[0]
+            finish_reason = choice.finish_reason
+
+            # ── Tool call branch ──────────────────────────────────────────────
+            if finish_reason == "tool_calls" and choice.message.tool_calls:
+                tool_call = choice.message.tool_calls[0]
+                tool_name = tool_call.function.name
+                try:
+                    tool_args = json.loads(tool_call.function.arguments)
+                except (json.JSONDecodeError, TypeError):
+                    tool_args = {}
+
+                logger.info(
+                    f"[llm_node] Session '{session_id}': tool_call → "
+                    f"{tool_name}({tool_args})"
+                )
+                return {
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                    "response": "",
+                    "messages": [],
+                }
+
+            # ── Direct response branch ────────────────────────────────────────
+            response_text = (choice.message.content or "").strip()
+
+        except Exception as tool_err:
+            # Cerebras may not support tools= yet — fall back to plain call
+            logger.warning(
+                f"[llm_node] Tool-calling failed ({tool_err}), falling back to plain call."
+            )
+            completion = await client.chat.completions.create(
+                model=settings.cerebras_model,
+                messages=api_messages,
+                max_tokens=256,
+                temperature=0.7,
+            )
+            response_text = completion.choices[0].message.content.strip()
+
+        logger.info(f"[llm_node] Session '{session_id}': response = '{response_text[:80]}'")
+        return {
+            "response": response_text,
+            "messages": [AIMessage(content=response_text)],
+            "tool_name": "",
+            "tool_args": {},
+        }
+
     except Exception as exc:
         logger.error(
             f"[llm_node] Cerebras API error for session '{session_id}': {exc}",
             exc_info=True,
         )
-        response_text = TOOL_ERROR_MESSAGE
+        return {
+            "response": TOOL_ERROR_MESSAGE,
+            "messages": [AIMessage(content=TOOL_ERROR_MESSAGE)],
+            "tool_name": "",
+            "tool_args": {},
+        }
+
+
+async def tool_node(state: AgentState) -> dict[str, Any]:
+    """
+    Node: tool_node
+    ---------------
+    Execute the tool named in state["tool_name"] with state["tool_args"].
+    Store the result in state["tool_output"].
+
+    Returns:
+        Partial state dict with tool_output populated.
+    """
+    tool_name = state.get("tool_name", "")
+    tool_args = state.get("tool_args", {})
+    session_id = state.get("session_id", "default")
+
+    logger.info(f"[tool_node] Session '{session_id}': executing {tool_name}({tool_args})")
+
+    try:
+        result = await _dispatch_tool(tool_name, tool_args)
+    except Exception as exc:
+        logger.error(f"[tool_node] Error executing '{tool_name}': {exc}", exc_info=True)
+        result = f"The {tool_name} tool encountered an error: {exc}"
+
+    logger.info(f"[tool_node] Result: '{str(result)[:120]}'")
+    return {"tool_output": str(result)}
+
+
+async def _dispatch_tool(tool_name: str, args: dict) -> str:
+    """Route a tool call by name to the appropriate backend function."""
+    if tool_name == "get_weather":
+        from backend.tools.weather import get_weather
+        return await get_weather(args.get("city", ""))
+
+    elif tool_name == "calculate":
+        from backend.tools.calculator import calculate
+        return calculate(args.get("expression", "0"))
+
+    elif tool_name == "web_search":
+        from backend.tools.web_search import web_search
+        return await web_search(
+            args.get("query", ""),
+            max_results=args.get("max_results", 3),
+        )
+
+    elif tool_name == "news_search":
+        from backend.tools.web_search import news_search
+        return await news_search(
+            args.get("topic", args.get("query", "")),
+            max_results=args.get("max_results", 3),
+        )
+
+    elif tool_name == "save_note":
+        from backend.tools.notion_notes import save_note
+        return await save_note(
+            title=args.get("title", "Voice Note"),
+            content=args.get("content", ""),
+        )
+
+    elif tool_name == "search_notes":
+        from backend.tools.notion_notes import search_notes
+        return await search_notes(args.get("query", ""))
+
+    elif tool_name == "list_notes":
+        from backend.tools.notion_notes import list_recent_notes
+        return await list_recent_notes(limit=args.get("limit", 5))
+
+    else:
+        return f"Unknown tool: {tool_name}"
+
+
+async def format_tool_response(state: AgentState) -> dict[str, Any]:
+    """
+    Node: format_tool_response
+    --------------------------
+    Re-invoke the LLM with the tool output injected as context so it can
+    produce a natural, voice-friendly final answer.
+
+    Returns:
+        Partial state dict with response and updated messages.
+    """
+    settings = get_settings()
+    session_id = state.get("session_id", "default")
+    tool_name = state.get("tool_name", "unknown")
+    tool_output = state.get("tool_output", "")
+    messages = list(state.get("messages", []))
+
+    logger.info(
+        f"[format_tool_response] Session '{session_id}': "
+        f"formatting result for tool '{tool_name}'"
+    )
+
+    # Build context: inject the tool result as an assistant turn
+    api_messages = [{"role": "system", "content": VOICE_AGENT_SYSTEM_PROMPT}]
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            api_messages.append({"role": "user", "content": str(msg.content)})
+        elif isinstance(msg, AIMessage):
+            api_messages.append({"role": "assistant", "content": str(msg.content)})
+
+    # Append tool result as a system-level context injection
+    api_messages.append({
+        "role": "user",
+        "content": (
+            f"[Tool result from {tool_name}]: {tool_output}\n\n"
+            "Please give me a concise, voice-friendly response based on this information."
+        ),
+    })
+
+    try:
+        client = _get_cerebras_client()
+        completion = await client.chat.completions.create(
+            model=settings.cerebras_model,
+            messages=api_messages,
+            max_tokens=256,
+            temperature=0.7,
+        )
+        response_text = completion.choices[0].message.content.strip()
+        logger.info(f"[format_tool_response] Response: '{response_text[:80]}'")
+
+    except Exception as exc:
+        logger.error(f"[format_tool_response] LLM error: {exc}", exc_info=True)
+        # Fall back to returning tool output directly (still useful)
+        response_text = tool_output
 
     return {
         "response": response_text,
@@ -138,15 +408,6 @@ def save_memory(state: AgentState) -> dict[str, Any]:
     Node: save_memory
     -----------------
     Persist the latest human + assistant message exchange to short-term memory.
-
-    Walks the messages list to find the last HumanMessage and last AIMessage
-    and writes them to the session store.
-
-    Args:
-        state: Current AgentState (messages fully populated after llm_node).
-
-    Returns:
-        Empty dict (no state mutation needed — side-effect node).
     """
     session_id = state.get("session_id", "default")
     messages = list(state.get("messages", []))

@@ -1,20 +1,23 @@
 """
 backend/pipeline/voice_pipeline.py
 ------------------------------------
-Day 3: LangGraph Agent + Cerebras LLM + Short-term Memory  (pipecat 1.4.0)
----------------------------------------------------------------------------
+Day 4: MCP Tools + Conditional Tool Routing + Session Cleanup  (pipecat 1.4.0)
+-------------------------------------------------------------------------------
 Architecture:
     LiveKit audio in
     → SileroVAD  (end-of-speech detection, stop_secs=0.8 s)
     → Groq Whisper STT  (whisper-large-v3-turbo, ~200-300 ms)
     → LatencyLoggerProcessor  (per-stage timing, passthrough)
-    → LangGraphLLMService  (LangGraph graph: load_memory→llm_node→save_memory)
+    → LangGraphLLMService  (LangGraph graph: load_memory → llm_node
+                            → [tool_node → format_tool_response →]? save_memory)
     → Cartesia Sonic TTS  (streaming chunks, first chunk ~90 ms)
     → LiveKit audio out
 
 Day 1: EchoLLMService echoes a canned reply → proves the audio path works.
 Day 2: LatencyLogger added; VAD threshold tuned; prewarm pre-loads VAD.
 Day 3: EchoLLMService replaced with LangGraphLLMService (Cerebras + memory).
+Day 4: Tool routing added (weather, calculator, web search, Notion);
+       session cleanup on EndFrame; gibberish/silence filtering.
 
 Run as standalone:
     python -m backend.pipeline.voice_pipeline
@@ -99,19 +102,25 @@ class EchoLLMService(LLMService):
             await self.push_frame(frame, direction)
 
 
-# ── LangGraph LLM Processor (Day 3) ──────────────────────────────────────────
+# ── LangGraph LLM Processor (Day 4: tool routing + session cleanup) ──────────
 class LangGraphLLMService(LLMService):
     """
-    Day 3: Replaces EchoLLMService.
+    Day 4: LangGraph agent with MCP tool routing.
 
-    On each LLMMessagesAppendFrame this processor:
-      1. Extracts the latest user utterance from the frame.
-      2. Calls run_agent_turn(session_id, user_text) which drives the full
-         LangGraph pipeline: load_memory → llm_node (Cerebras) → save_memory.
-      3. Pushes the LLM response as streaming TextFrames to Cartesia TTS.
+    On each LLMMessagesAppendFrame / TranscriptionFrame this processor:
+      1. Extracts the latest user utterance.
+      2. Filters silence / gibberish (< 2 words or empty).
+      3. Calls run_agent_turn() which drives the full LangGraph pipeline:
+             load_memory → llm_node → [tool_node → format_tool_response →]?
+             save_memory
+      4. Pushes the response as streaming TextFrames to Cartesia TTS.
+      5. On EndFrame: clears short-term memory for this session.
 
     pipecat 1.4.0 note: Override process_frame() — not _process_frame.
     """
+
+    # Minimum word count to treat as a valid utterance (avoids noise / breath)
+    _MIN_WORDS = 2
 
     def __init__(self, session_id: str = "default"):
         super().__init__()
@@ -120,11 +129,31 @@ class LangGraphLLMService(LLMService):
 
     async def process_frame(self, frame: object, direction: FrameDirection):
         """
-        Intercept TranscriptionFrame (from STT) and route it through the LangGraph agent.
+        Intercept TranscriptionFrame / LLMMessagesAppendFrame and route through
+        the LangGraph agent. Handle EndFrame for session cleanup.
         All other frames are forwarded unchanged.
         """
         await super().process_frame(frame, direction)
 
+        # ── Session cleanup on disconnect ─────────────────────────────
+        if isinstance(frame, EndFrame):
+            logger.info(
+                f"[LangGraphLLM] EndFrame received — clearing session '{self._session_id}'"
+            )
+            try:
+                import backend.memory.short_term as _mem
+                _mem.clear_session(self._session_id)
+                logger.info(
+                    f"[LangGraphLLM] Session '{self._session_id}' memory cleared."
+                )
+            except Exception as cleanup_err:
+                logger.warning(
+                    f"[LangGraphLLM] Session cleanup error: {cleanup_err}"
+                )
+            await self.push_frame(frame, direction)
+            return
+
+        # ── Extract user text ─────────────────────────────────────────
         user_text = ""
         if isinstance(frame, TranscriptionFrame):
             user_text = frame.text.strip()
@@ -138,9 +167,18 @@ class LangGraphLLMService(LLMService):
             await self.push_frame(frame, direction)
             return
 
+        # ── Silence / gibberish filter ────────────────────────────────
         if not user_text:
-            logger.warning(
-                f"[LangGraphLLM] Turn #{self._call_count + 1}: no user text found, skipping."
+            logger.debug(
+                f"[LangGraphLLM] Turn #{self._call_count + 1}: empty transcript, skipping."
+            )
+            return
+
+        word_count = len(user_text.split())
+        if word_count < self._MIN_WORDS:
+            logger.info(
+                f"[LangGraphLLM] Short utterance ({word_count} word(s)): "
+                f"'{user_text}' — skipping (min={self._MIN_WORDS})."
             )
             return
 
@@ -151,12 +189,19 @@ class LangGraphLLMService(LLMService):
             f"Session '{self._session_id}' | User: '{user_text[:60]}'"
         )
 
-        # ── Run LangGraph agent turn ──────────────────────────────────
+        # ── Run LangGraph agent turn (with tool routing) ──────────────
         try:
             response_text = await _run_agent_turn(
                 session_id=self._session_id,
                 user_text=user_text,
             )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"[LangGraphLLM] Timeout on turn #{self._call_count} — "
+                f"session '{self._session_id}'"
+            )
+            from backend.agent.prompts import TOOL_ERROR_MESSAGE
+            response_text = "I'm sorry, that took too long. Please try again."
         except Exception as exc:
             logger.error(
                 f"[LangGraphLLM] Agent error (turn #{self._call_count}): {exc}",
@@ -164,6 +209,9 @@ class LangGraphLLMService(LLMService):
             )
             from backend.agent.prompts import TOOL_ERROR_MESSAGE
             response_text = TOOL_ERROR_MESSAGE
+
+        if not response_text:
+            response_text = "I'm sorry, I didn't get a response. Could you repeat that?"
 
         logger.info(
             f"[LangGraphLLM] Turn #{self._call_count} | "
