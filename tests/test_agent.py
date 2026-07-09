@@ -382,7 +382,7 @@ class TestLangGraphLLMService:
             new=AsyncMock(return_value="A response"),
         ):
             frame = LLMMessagesAppendFrame(
-                messages=[{"role": "user", "content": "Hello"}]
+                messages=[{"role": "user", "content": "Hello there"}]
             )
             from pipecat.processors.frame_processor import FrameDirection
             await svc.process_frame(frame, FrameDirection.DOWNSTREAM)
