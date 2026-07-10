@@ -109,6 +109,22 @@
       0%,100% { opacity: 1; } 50% { opacity: .3; }
     }
 
+    /* Startup hint below status */
+    .startup-hint {
+      font-size: 0.75rem;
+      color: #3b5070;
+      margin-top: 6px;
+      display: none;
+      line-height: 1.5;
+    }
+    .startup-hint.show { display: block; }
+    .startup-hint span {
+      display: inline-block;
+      animation: spin 1.2s linear infinite;
+      margin-right: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     /* Audio visualiser bar */
     .visualiser {
       display: none;
@@ -202,6 +218,10 @@
 
   <div class="transcript-box" id="transcript"></div>
   <div class="err-msg" id="errMsg"></div>
+  <div class="startup-hint" id="startupHint">
+    <span>⏳</span> Agent is warming up&thinsp;&mdash;&thinsp;this takes <strong>3&ndash;5 seconds</strong>.
+    You&rsquo;ll hear &ldquo;Hi, I&rsquo;m ready!&rdquo; when the pipeline is live.
+  </div>
 </div>
 
 <!-- LiveKit JS SDK (browser build) -->
@@ -264,11 +284,16 @@
     });
 
     room.on(LivekitClient.RoomEvent.Connected, () => {
-      setStatus('connected', `Connected — room: ${roomName}`);
+      // Room is joined but the Pipecat pipeline still needs ~3-5 s to:
+      //   1. Pre-warm Silero VAD model (~500 ms)
+      //   2. Compile the LangGraph StateGraph (~20-50 ms)
+      //   3. Negotiate WebRTC audio channels via LiveKit
+      // Show a "warming up" indicator so the user knows to wait.
+      setStatus('connecting', 'Warming up agent… (3–5 s)');
+      document.getElementById('startupHint').classList.add('show');
       document.getElementById('connectBtn').style.display = 'none';
       document.getElementById('disconnectBtn').style.display = 'block';
       document.getElementById('visualiser').classList.add('active');
-      addTranscript('agent', '(waiting for agent to join the room…)');
     });
 
     room.on(LivekitClient.RoomEvent.Disconnected, () => {
@@ -276,12 +301,16 @@
       document.getElementById('connectBtn').style.display = 'block';
       document.getElementById('disconnectBtn').style.display = 'none';
       document.getElementById('visualiser').classList.remove('active');
+      document.getElementById('startupHint').classList.remove('show');
     });
 
     room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
       if (track.kind === LivekitClient.Track.Kind.Audio) {
         track.attach();   // plays agent audio through the browser speaker
-        addTranscript('agent', '(agent audio connected — speak now!)');
+        // Agent audio is live — pipeline is fully ready!
+        setStatus('connected', 'Connected — speak now! 🎙️');
+        document.getElementById('startupHint').classList.remove('show');
+        addTranscript('agent', '(agent connected — you should hear \'Hi, I\'m ready!\' now)');
       }
     });
 

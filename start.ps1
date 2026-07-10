@@ -18,15 +18,10 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 
 Write-Host ""
 Write-Host "Step 1: Starting FastAPI server (port 8000)..." -ForegroundColor Yellow
+Write-Host "(Note: The FastAPI server automatically launches the voice agent pipeline when a user connects)" -ForegroundColor Gray
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; .venv\Scripts\uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
 
-Write-Host "Waiting for FastAPI to start..."
-Start-Sleep -Seconds 3
-
-Write-Host ""
-Write-Host "Step 2: Starting LiveKit Agent Worker..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; $env:PYTHONPATH='$PWD'; .venv\Scripts\python -m backend.agent_worker dev"
-
+Write-Host "Ready! Open http://localhost:8000/test in your browser." -ForegroundColor Green
 Write-Host ""
 Write-Host "=== Services started ===" -ForegroundColor Green
 Write-Host "  FastAPI:       http://localhost:8000"

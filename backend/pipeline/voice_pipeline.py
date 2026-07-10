@@ -1,8 +1,8 @@
 """
 backend/pipeline/voice_pipeline.py
 ------------------------------------
-Day 4: MCP Tools + Conditional Tool Routing + Session Cleanup  (pipecat 1.4.0)
--------------------------------------------------------------------------------
+Pipecat voice pipeline wired to LiveKit transport  (pipecat 1.4.0)
+-------------------------------------------------------------------
 Architecture:
     LiveKit audio in
     → SileroVAD  (end-of-speech detection, stop_secs=0.8 s)
@@ -10,14 +10,9 @@ Architecture:
     → LatencyLoggerProcessor  (per-stage timing, passthrough)
     → LangGraphLLMService  (LangGraph graph: load_memory → llm_node
                             → [tool_node → format_tool_response →]? save_memory)
+    → GreetingProcessor  (plays one-shot "Hi, I'm ready!" on connect)
     → Cartesia Sonic TTS  (streaming chunks, first chunk ~90 ms)
     → LiveKit audio out
-
-Day 1: EchoLLMService echoes a canned reply → proves the audio path works.
-Day 2: LatencyLogger added; VAD threshold tuned; prewarm pre-loads VAD.
-Day 3: EchoLLMService replaced with LangGraphLLMService (Cerebras + memory).
-Day 4: Tool routing added (weather, calculator, web search, Notion);
-       session cleanup on EndFrame; gibberish/silence filtering.
 
 Run as standalone:
     python -m backend.pipeline.voice_pipeline
@@ -58,48 +53,43 @@ async def _run_agent_turn(session_id: str, user_text: str) -> str:
     return await run_agent_turn(session_id=session_id, user_text=user_text)
 
 
-# ── Echo LLM Processor (Day 1 stub — kept for reference) ────────────────────
-class EchoLLMService(LLMService):
+# ── Greeting Processor ───────────────────────────────────────────────────────
+class GreetingProcessor(FrameProcessor):
     """
-    Day 1 stub: Echoes back a canned response to prove the pipeline works.
-    Superseded by LangGraphLLMService in Day 3 — kept for easy rollback.
+    Plays a one-shot audio greeting ("Hi, I'm ready!") the first time a
+    StartFrame arrives — i.e. exactly when the pipeline finishes connecting
+    and is ready to listen.  After firing once it becomes a transparent
+    pass-through for all subsequent frames.
 
-    pipecat 1.4.0 note: Override process_frame() (not _process_frame, which was removed).
+    Placement in pipeline:
+        ... → LangGraphLLMService → GreetingProcessor → CartesiaTTSService → ...
+
+    The GreetingProcessor injects:
+        LLMFullResponseStartFrame  (signals TTS to start streaming)
+        TextFrame("Hi, I'm ready!")  (the greeting text to synthesise)
+        LLMFullResponseEndFrame    (signals TTS to finish)
+    These are forwarded *before* the StartFrame so TTS speaks immediately.
     """
+
+    GREETING_TEXT = "Hi, I'm ready!"
 
     def __init__(self):
         super().__init__()
-        self._call_count = 0
+        self._greeted = False
 
     async def process_frame(self, frame: object, direction: FrameDirection):
-        """
-        Intercept LLMMessagesAppendFrame, extract the last user message,
-        and push a TextFrame with a canned echo response.
-
-        All other frames MUST be forwarded explicitly — in pipecat 1.4.0
-        neither FrameProcessor nor LLMService auto-pushes frames downstream.
-        Without this, StartFrame never reaches the end of the pipeline.
-        """
+        """Forward all frames; inject greeting once on the first StartFrame."""
+        from pipecat.frames.frames import StartFrame
         await super().process_frame(frame, direction)
 
-        if isinstance(frame, LLMMessagesAppendFrame):
-            self._call_count += 1
-            user_text = ""
-            for msg in reversed(frame.messages):
-                if isinstance(msg, dict) and msg.get("role") == "user":
-                    user_text = msg.get("content", "")
-                    break
-
-            logger.info(f"[EchoLLM] Turn #{self._call_count} | User said: '{user_text}'")
+        if not self._greeted and isinstance(frame, StartFrame):
+            self._greeted = True
+            logger.info("[Greeting] Pipeline ready — sending audio greeting.")
             await self.push_frame(LLMFullResponseStartFrame())
-            echo_response = (
-                f"Echo pipeline working. I heard you say: {user_text}. "
-                f"This is turn number {self._call_count}."
-            )
-            await self.push_frame(TextFrame(echo_response))
+            await self.push_frame(TextFrame(self.GREETING_TEXT))
             await self.push_frame(LLMFullResponseEndFrame())
-        else:
-            await self.push_frame(frame, direction)
+
+        await self.push_frame(frame, direction)
 
 
 # ── LangGraph LLM Processor (Day 4: tool routing + session cleanup) ──────────
@@ -120,7 +110,8 @@ class LangGraphLLMService(LLMService):
     """
 
     # Minimum word count to treat as a valid utterance (avoids noise / breath)
-    _MIN_WORDS = 2
+    # Set to 1 so the agent can respond to single words like "Hello"
+    _MIN_WORDS = 1
 
     def __init__(self, session_id: str = "default"):
         super().__init__()
@@ -353,7 +344,10 @@ async def create_voice_pipeline(
         ),
     )
 
-    # ── Pipeline (Day 3: LangGraphLLMService replaces Echo stub) ───────────────
+    # ── Greeting processor (fires once on connect) ───────────────────────────
+    greeting = GreetingProcessor()
+
+    # ── Pipeline ──────────────────────────────────────────────────────────────
     pipeline = Pipeline(
         [
             transport.input(),  # receive audio frames from LiveKit
@@ -361,6 +355,7 @@ async def create_voice_pipeline(
             stt,                # speech → text  (Groq Whisper)
             latency_logger,     # 📊 per-stage timing (passthrough)
             llm,                # text → response text (LangGraph + Cerebras)
+            greeting,           # 🔔 one-shot "Hi, I'm ready!" on connect
             tts,                # response text → audio (Cartesia Sonic)
             transport.output(), # send audio frames back to LiveKit
         ]
@@ -466,7 +461,7 @@ if __name__ == "__main__":
             groq_api_key=os.getenv("GROQ_API_KEY"),
             cartesia_api_key=os.getenv("CARTESIA_API_KEY"),
             cartesia_voice_id=os.getenv(
-                "CARTESIA_VOICE_ID", "694f9389-aac1-45b6-b726-9d9369183238"
+                "CARTESIA_VOICE_ID"
             ),
         )
 

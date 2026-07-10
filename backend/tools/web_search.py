@@ -15,7 +15,7 @@ import logging
 from typing import Optional
 
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
 except ImportError:
     DDGS = None  # type: ignore[assignment]
 
@@ -43,7 +43,7 @@ async def web_search(query: str, max_results: int = 3) -> str:
         def _search():
             with DDGS() as ddgs:
                 results = list(ddgs.text(
-                    keywords=query,
+                    query,
                     max_results=max_results,
                     safesearch="moderate",
                 ))
@@ -95,7 +95,7 @@ async def news_search(topic: str, max_results: int = 3) -> str:
         def _search():
             with DDGS() as ddgs:
                 results = list(ddgs.news(
-                    keywords=topic,
+                    topic,
                     max_results=max_results,
                 ))
             return results

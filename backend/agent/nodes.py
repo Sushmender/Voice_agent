@@ -377,7 +377,8 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
         "role": "user",
         "content": (
             f"[Tool result from {tool_name}]: {tool_output}\n\n"
-            "Please give me a concise, voice-friendly response based on this information."
+            "Please give me a concise, voice-friendly response based on this information. "
+            "CRITICAL: Do NOT output any JSON, tool calls, or commands. Speak the final answer directly in plain English."
         ),
     })
 
@@ -390,7 +391,13 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
             temperature=0.7,
         )
         response_text = completion.choices[0].message.content.strip()
-        logger.info(f"[format_tool_response] Response: '{response_text[:80]}'")
+        
+        # Clean up any hallucinated JSON tool call prefixed to the response
+        import re
+        response_text = re.sub(r'^\{.*?\}\s*', '', response_text).strip()
+        response_text = re.sub(r'^```json.*?```\s*', '', response_text, flags=re.DOTALL).strip()
+        
+        logger.info(f"[format_tool_response] Cleaned Response: '{response_text[:80]}'")
 
     except Exception as exc:
         logger.error(f"[format_tool_response] LLM error: {exc}", exc_info=True)
