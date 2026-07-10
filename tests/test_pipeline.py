@@ -1,9 +1,9 @@
 """
 tests/test_pipeline.py
 -----------------------
-Day 2 Automated Test Suite
+Automated Test Suite
 ============================
-Covers every checklist item from tasks.md Day 2 that can be verified
+Covers every checklist item from tasks.md that can be verified
 without a running LiveKit room or real API calls.
 
 Test categories
@@ -14,7 +14,7 @@ Test categories
 4. VAD configuration      — verify Silero VAD is wired and tuned
 5. Pipeline structure     — verify LatencyLogger appears in the chain
 6. Latency summary        — verify summary table output
-7. Day 2 milestone        — end-to-end stub confirming all stages fire
+7. Milestone        — end-to-end stub confirming all stages fire
 
 Run:
     pytest tests/test_pipeline.py -v
@@ -387,7 +387,7 @@ class TestTTSConfiguration:
 # ===========================================================================
 
 class TestVADConfiguration:
-    """Verify Silero VAD is enabled and tuned for Day 2 latency targets."""
+    """Verify Silero VAD is enabled and tuned for latency targets."""
 
     def test_silero_vad_importable(self):
         """SileroVADAnalyzer must be importable."""
@@ -407,7 +407,7 @@ class TestVADConfiguration:
         from backend.pipeline.voice_pipeline import create_voice_pipeline
         source = inspect.getsource(create_voice_pipeline)
         assert "stop_secs=0.8" in source, (
-            "VAD stop_secs must be 0.8 (Day 2 latency tuning)"
+            "VAD stop_secs must be 0.8 (latency tuning)"
         )
 
     def test_prewarm_loads_vad(self):
@@ -434,7 +434,7 @@ class TestVADConfiguration:
 # ===========================================================================
 
 class TestPipelineStructure:
-    """Verify the Day 2 pipeline includes LatencyLoggerProcessor."""
+    """Verify the pipeline includes LatencyLoggerProcessor."""
 
     def test_latency_logger_in_pipeline_source(self):
         """create_voice_pipeline source must reference LatencyLoggerProcessor."""
@@ -491,7 +491,7 @@ class TestPipelineStructure:
         from backend.pipeline.voice_pipeline import run_pipeline
         sig = inspect.signature(run_pipeline)
         assert "vad_analyzer" in sig.parameters, (
-            "run_pipeline must accept vad_analyzer (Day 2 pre-warm support)"
+            "run_pipeline must accept vad_analyzer (pre-warm support)"
         )
 
     def test_create_pipeline_accepts_vad_analyzer(self):
@@ -503,12 +503,12 @@ class TestPipelineStructure:
 
 
 # ===========================================================================
-# 6. DAY 2 MILESTONE
+# 6. MILESTONE
 # ===========================================================================
 
-class TestDay2Milestone:
+class TestMilestone:
     """
-    Verifies Day 2 milestone checklist items that can be automated:
+    Verifies milestone checklist items that can be automated:
     - LatencyLogger correctly instruments a synthetic turn
     - ASR / TTS / VAD all configured to spec
     - Pipeline can be instantiated (mocked transport)
@@ -576,8 +576,8 @@ class TestDay2Milestone:
         assert turn.tts_ms   >= 80,  f"TTS_ms={turn.tts_ms:.0f} — expected ≥80 ms"
         assert turn.total_ms >= 130, f"total_ms={turn.total_ms:.0f} — expected ≥130 ms"
 
-    def test_all_day2_components_importable(self):
-        """All Day 2 components must import without errors."""
+    def test_all_components_importable(self):
+        """All components must import without errors."""
         from backend.pipeline.latency_logger import LatencyLoggerProcessor, TurnLatency
         from pipecat.audio.vad.silero import SileroVADAnalyzer
         from pipecat.services.groq.stt import GroqSTTService

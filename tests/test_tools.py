@@ -1,7 +1,7 @@
 """
 tests/test_tools.py
 -------------------
-Day 4: Tests for all MCP tools and the FastMCP server.
+Tests for all MCP tools and the FastMCP server.
 
 Tests
 -----

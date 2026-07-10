@@ -1,7 +1,7 @@
 """
 tests/test_config.py
 ---------------------
-Day 1 tests: validate configuration loading and token generation.
+Test: validate configuration loading and token generation.
 Run: pytest tests/test_config.py -v
 """
 import os

@@ -1,9 +1,9 @@
 """
 tests/test_agent.py
 --------------------
-Day 3 Test Suite — LangGraph Agent + Cerebras LLM
+Test Suite — LangGraph Agent
 ==================================================
-Tests every Day 3 checklist item that can be verified without real API calls
+Tests every item that can be verified without real API calls
 or a live LiveKit room.
 
 Test categories
@@ -14,7 +14,7 @@ Test categories
 4. llm_node             — Cerebras API call (mocked)
 5. LangGraphLLMService  — pipecat frame processing (mocked graph)
 6. run_agent_turn       — end-to-end convenience wrapper (mocked)
-7. Day 3 milestone      — multi-turn memory scenario (mocked LLM)
+7. milestone            — multi-turn memory scenario (mocked LLM)
 
 Run:
     pytest tests/test_agent.py -v
@@ -483,12 +483,12 @@ class TestRunAgentTurn:
 
 
 # ===========================================================================
-# 7. Day 3 Milestone — multi-turn memory scenario (mocked LLM)
+# 7. Milestone — multi-turn memory scenario (mocked LLM)
 # ===========================================================================
 
 class TestDay3Milestone:
     """
-    Simulate the Day 3 milestone acceptance scenarios:
+    Simulate the milestone acceptance scenarios:
     - Turn 1: \"My name is Alice\" → agent acknowledges
     - Turn 2: \"What is my name?\" → agent recalls \"Alice\"
     - Turn 5+: conversation context maintained

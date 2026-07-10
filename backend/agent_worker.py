@@ -114,7 +114,7 @@ async def entrypoint(ctx: JobContext):
     # Launch Pipecat voice pipeline in this room
     logger.info(f"[Agent] Launching Pipecat voice pipeline for room '{room_name}'...")
 
-    # Retrieve pre-warmed VAD analyzer from prewarm() (Day 2)
+    # Retrieve pre-warmed VAD analyzer from prewarm()
     vad_analyzer = getattr(ctx.proc, "userdata", {}).get("vad_analyzer")
 
     try:
@@ -126,7 +126,7 @@ async def entrypoint(ctx: JobContext):
             cartesia_api_key=settings.cartesia_api_key,
             cartesia_voice_id=settings.cartesia_voice_id,
             vad_analyzer=vad_analyzer,
-            session_id=room_name,   # Day 3: key short-term memory per room
+            session_id=room_name,   # key short-term memory per room
         )
     except Exception as e:
         logger.error(f"[Agent] Pipeline error in room '{room_name}': {e}", exc_info=True)
@@ -139,7 +139,7 @@ def prewarm(proc: JobProcess):
     Pre-warm resources before the first job arrives.
     Called once when the worker process starts.
 
-    Day 2: Pre-load the Silero VAD model so it is ready when the first room
+    Pre-load the Silero VAD model so it is ready when the first room
     join fires. The model (~8 MB) takes ~500 ms on first load; pre-warming
     removes this latency from the first conversation turn.
     """
@@ -160,7 +160,7 @@ def prewarm(proc: JobProcess):
         logger.warning(f"[Worker] VAD pre-warm failed (non-fatal): {exc}")
         proc.userdata["vad_analyzer"] = None
 
-    # Day 3: Pre-compile the LangGraph agent graph so the first voice turn
+    # Pre-compile the LangGraph agent graph so the first voice turn
     # doesn't pay the ~20-50 ms compilation cost.
     try:
         from backend.agent.graph import get_agent_graph

@@ -1,7 +1,7 @@
 """
 backend/agent/state.py
 -----------------------
-LangGraph agent state definition (updated Day 4 — tool routing added).
+LangGraph agent state definition (updated with tool routing).
 """
 from typing import Annotated, Optional, Sequence
 from langchain_core.messages import BaseMessage
@@ -18,8 +18,8 @@ class AgentState(TypedDict):
                         Uses add_messages reducer to append rather than replace.
         session_id:     Unique identifier for this conversation session.
         user_input:     The latest user utterance (injected before memory load).
-        tool_name:      Name of the tool to call (set by llm_node, Day 4).
-        tool_args:      Arguments for the tool call as a dict (Day 4).
+        tool_name:      Name of the tool to call (set by llm_node).
+        tool_args:      Arguments for the tool call as a dict.
         tool_output:    Output from the last MCP tool call (if any).
         response:       Final response text to be sent to TTS.
     """

@@ -1,7 +1,7 @@
 """
 tests/test_memory.py
 ---------------------
-Day 3 Test Suite — Short-term Memory Module
+Test Suite — Short-term Memory Module
 ============================================
 Covers every public function in backend/memory/short_term.py.
 

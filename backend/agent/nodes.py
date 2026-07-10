@@ -3,7 +3,7 @@ backend/agent/nodes.py
 ----------------------
 LangGraph node functions for the voice AI agent.
 
-Nodes (Day 4)
+Nodes
 -------------
 load_memory             : Pull conversation history into AgentState.
 llm_node                : Call Cerebras LLM; detect tool-call intent via

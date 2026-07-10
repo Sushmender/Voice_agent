@@ -1,7 +1,7 @@
 """
 backend/pipeline/latency_logger.py
 ------------------------------------
-Day 2: LatencyLoggerProcessor — a passthrough FrameProcessor inserted into the
+LatencyLoggerProcessor — a passthrough FrameProcessor inserted into the
 Pipecat pipeline to measure per-stage latency without disrupting the audio flow.
 
 Measured stages per turn

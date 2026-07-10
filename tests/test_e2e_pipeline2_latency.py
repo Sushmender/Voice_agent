@@ -512,7 +512,7 @@ class TestE2EVoiceModulation:
         from backend.pipeline.voice_pipeline import create_voice_pipeline
         source = inspect.getsource(create_voice_pipeline)
         assert "stop_secs=0.8" in source, (
-            "VAD stop_secs must be 0.8 for Day 2 latency tuning — "
+            "VAD stop_secs must be 0.8 for latency tuning — "
             "reduces turn-end detection lag from ~1000 ms to ~800 ms"
         )
 

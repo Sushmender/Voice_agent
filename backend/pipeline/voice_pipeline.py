@@ -45,7 +45,7 @@ from pipecat.services.llm_service import LLMService
 logger = logging.getLogger(__name__)
 
 
-# Day 3: Lazy wrapper so tests can patch 'backend.pipeline.voice_pipeline._run_agent_turn'
+# Lazy wrapper so tests can patch 'backend.pipeline.voice_pipeline._run_agent_turn'
 # without triggering the full agent import at module load time.
 async def _run_agent_turn(session_id: str, user_text: str) -> str:
     """Thin wrapper around backend.agent.graph.run_agent_turn (imported lazily)."""
@@ -92,10 +92,10 @@ class GreetingProcessor(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
-# ── LangGraph LLM Processor (Day 4: tool routing + session cleanup) ──────────
+# ── LangGraph LLM Processor (tool routing + session cleanup) ──────────
 class LangGraphLLMService(LLMService):
     """
-    Day 4: LangGraph agent with MCP tool routing.
+    LangGraph agent with MCP tool routing.
 
     On each LLMMessagesAppendFrame / TranscriptionFrame this processor:
       1. Extracts the latest user utterance.
@@ -224,13 +224,13 @@ async def create_voice_pipeline(
     groq_api_key: str,
     cartesia_api_key: str,
     cartesia_voice_id: str,
-    vad_analyzer=None,      # Day 2: accept pre-warmed VAD from prewarm()
-    session_id: str | None = None,  # Day 3: session key for short-term memory
+    vad_analyzer=None,      # accept pre-warmed VAD from prewarm()
+    session_id: str | None = None,  # session key for short-term memory
 ) -> PipelineWorker:
     """
     Build and return a Pipecat PipelineWorker wired to LiveKit transport.
 
-    Pipeline stages (Day 3):
+    Pipeline stages:
         transport.input()       -> receive audio frames from LiveKit
         SileroVAD               -> end-of-speech detection (stop_secs=0.8)
         STT service             -> Groq Whisper whisper-large-v3-turbo
@@ -278,7 +278,7 @@ async def create_voice_pipeline(
             "Run: pip install 'pipecat-ai[livekit,silero]'"
         )
 
-    # ── VAD (Day 2: tuned stop_secs for lower turn-end latency) ──────────────
+    # ── VAD ( tuned stop_secs for lower turn-end latency) ──────────────
     # stop_secs=0.8 means 800 ms of silence triggers end-of-speech.
     # Default is ~1.0 s; 0.8 s reduces perceived response lag noticeably.
     # Use pre-warmed analyzer from prewarm() if available (avoids model reload).
@@ -312,8 +312,8 @@ async def create_voice_pipeline(
     vad_processor = VADProcessor(vad_analyzer=vad_analyzer)
 
     # ── ASR (Groq Whisper - generous free tier, ~200-300ms) ───────────────────
-    # NOTE: On Day 1 we include the real Groq Whisper STT - the EchoLLM handles
-    # responses instead of the real LangGraph agent (added Day 3).
+    # NOTE: we include the real Groq Whisper STT - the LLM handles
+    # responses instead of the real LangGraph agent.
     # Using pipecat 1.4.0 Settings API.
     stt = GroqSTTService(
         api_key=groq_api_key,
@@ -323,11 +323,11 @@ async def create_voice_pipeline(
         ),
     )
 
-    # ── Latency Logger (Day 2: passthrough timing middleware) ────────────────
+    # ── Latency Logger  (passthrough timing middleware) ────────────────
     from backend.pipeline.latency_logger import LatencyLoggerProcessor
     latency_logger = LatencyLoggerProcessor()
 
-    # ── LLM (Day 3: LangGraph agent — Cerebras + short-term memory) ───────────
+    # ── LLM (LangGraph agent — Cerebras + short-term memory) ───────────
     _session_id = session_id or room_name
     llm = LangGraphLLMService(session_id=_session_id)
     logger.info(f"[Pipeline] LangGraph agent initialised for session '{_session_id}'")
@@ -380,8 +380,8 @@ async def run_pipeline(
     groq_api_key: str,
     cartesia_api_key: str,
     cartesia_voice_id: str,
-    vad_analyzer=None,      # Day 2: forwarded from agent_worker prewarm()
-    session_id: str | None = None,  # Day 3: short-term memory session key
+    vad_analyzer=None,      #  forwarded from agent_worker prewarm()
+    session_id: str | None = None,  # session key for short-term memory
 ):
     """Entry point to run the pipeline until the room is empty or an error occurs."""
     start_time = time.perf_counter()
@@ -415,7 +415,7 @@ async def run_pipeline(
 if __name__ == "__main__":
     """
     Run the echo pipeline directly (without the livekit-agents worker).
-    Useful for quick Day 1 testing.
+    Useful for quick testing.
 
     Usage:
         python -m backend.pipeline.voice_pipeline

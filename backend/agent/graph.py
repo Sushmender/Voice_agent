@@ -3,7 +3,7 @@ backend/agent/graph.py
 -----------------------
 LangGraph StateGraph wiring for the voice AI agent.
 
-Graph topology (Day 4 — with tool routing):
+Graph topology with tool routing:
 
     START → load_memory → llm_node ─┬─(tool call)──→ tool_node → format_tool_response → save_memory → END
                                      └─(no tool)────────────────────────────────────────→ save_memory → END

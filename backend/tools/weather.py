@@ -7,8 +7,6 @@ Uses Open-Meteo + Open-Meteo Geocoding API to:
 1. Convert city name → (lat, lon)
 2. Fetch current weather at those coordinates
 
-Fully implemented on Day 4. This stub can be imported on Day 1.
-
 Example usage:
     from backend.tools.weather import get_weather
     result = await get_weather("Paris")

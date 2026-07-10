@@ -2,7 +2,6 @@
 backend/agent/prompts.py
 ------------------------
 System prompt for the voice agent (optimised for voice interaction).
-Populated on Day 3 when LangGraph is wired in.
 """
 
 VOICE_AGENT_SYSTEM_PROMPT = """You are a helpful, friendly voice assistant powered by advanced AI.

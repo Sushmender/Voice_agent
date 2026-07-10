@@ -2,7 +2,7 @@
 backend/memory/short_term.py
 -----------------------------
 Session-scoped short-term memory manager.
-Populated on Day 3 when LangGraph is wired in.
+Populated when LangGraph is wired in.
 
 Uses a dictionary keyed by session_id to maintain per-session chat history.
 Each session stores the last N conversation turns (configurable via MAX_SESSION_HISTORY).
