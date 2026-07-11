@@ -33,10 +33,21 @@ class Settings(BaseSettings):
 
     # ── Cartesia ──────────────────────────────────────────────────────────────
     cartesia_api_key: str = Field(..., description="Cartesia Sonic API key")
+    # For Version 1.0 backward compatibility, keep this as default
     cartesia_voice_id: str = Field(
         "694f9389-aac1-45b6-b726-9d9369183238",
-        description="Cartesia voice ID (American English female by default)",
+        description="Cartesia default voice ID",
     )
+    cartesia_voice_ids: str = Field(
+        "694f9389-aac1-45b6-b726-9d9369183238",
+        description="Comma-separated list of Cartesia voice IDs to randomly assign to new users",
+    )
+
+    # ── Database & Auth ───────────────────────────────────────────────────────
+    mongodb_uri: str = Field("mongodb://localhost:27017", description="MongoDB connection string")
+    jwt_secret_key: str = Field("change_this_to_a_secure_random_string", description="JWT signing key")
+    jwt_algorithm: str = Field("HS256", description="Algorithm used to sign JWTs")
+    jwt_expiration_hours: int = Field(24, description="JWT expiration time in hours")
 
     # ── Notion ────────────────────────────────────────────────────────────────
     notion_api_key: str = Field("", description="Notion integration token")
