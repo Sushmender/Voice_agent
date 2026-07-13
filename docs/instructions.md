@@ -4,10 +4,11 @@ This guide will walk you through running your Voice AI Agent and provide specifi
 
 ---
 
-## 🚀 How to Run the Application
+## 🚀 How to Run the backend swagger Application
 
 1. **Verify your API Keys**
    Ensure your `.env` file contains valid keys for all services:
+   - MongoDB (MONGO_URI)
    - LiveKit (URL, API Key, API Secret)
    - Groq (Whisper STT)
    - Cartesia (Sonic TTS)
@@ -19,15 +20,25 @@ This guide will walk you through running your Voice AI Agent and provide specifi
    ```powershell
    .\start.ps1
    ```
-   *This starts the FastAPI server. The server will automatically launch the Pipecat voice pipeline when you connect via the browser.*
+   *This starts the FastAPI server.*
 
-3. **Open the Test Client**
-   Once the server is running, open your web browser and go to:
-   👉 **[http://localhost:8000/test](http://localhost:8000/test)**
+3. **Authenticate via Swagger UI**
+   - Open your web browser and go to: **[http://localhost:8000/docs](http://localhost:8000/docs)**
+   - Under `POST /auth/signup`, sign up a new user (provide `name`, `email`, and `password`).
+   - Click the green **Authorize** padlock button at the top of the page. Enter your email and password, then click Authorize and Close.
+   - Scroll down to `POST /api/token`, click **Try it out**, and hit **Execute**.
+   - Copy the `livekit_url` and the `token` string from the JSON response.
 
-4. **Connect**
+4. **Connect to the Test Client**
+   - Open a new tab and go to: **[http://localhost:8000/test](http://localhost:8000/test)**
+   - Paste the `LiveKit URL` and `LiveKit Token` you copied from Swagger into the input boxes.
    - Click **Connect to Agent**.
-   - Wait 3-5 seconds while the agent warms up.
+   - Wait 3-5 seconds for the agent to connect. Once it does, it will say "Hi, I'm ready!" and you can start talking.
+
+5. **Verify Data in MongoDB**
+   - Open your [MongoDB Atlas Dashboard](https://cloud.mongodb.com/).
+   - Go to your Cluster -> **Browse Collections** -> **voice_agent_db** -> **users**.
+   - Find your user document and verify that the agent has recorded your entire conversation history in the `conversations` array!
    - Once you hear **"Hi, I'm ready!"** and see the green connected status, you can start speaking.
 
 ---

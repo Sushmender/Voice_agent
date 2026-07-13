@@ -47,10 +47,10 @@ logger = logging.getLogger(__name__)
 
 # Lazy wrapper so tests can patch 'backend.pipeline.voice_pipeline._run_agent_turn'
 # without triggering the full agent import at module load time.
-async def _run_agent_turn(session_id: str, user_text: str) -> str:
+async def _run_agent_turn(session_id: str, user_text: str, user_name: str = "User", user_id: str = "") -> str:
     """Thin wrapper around backend.agent.graph.run_agent_turn (imported lazily)."""
     from backend.agent.graph import run_agent_turn
-    return await run_agent_turn(session_id=session_id, user_text=user_text)
+    return await run_agent_turn(session_id=session_id, user_text=user_text, user_name=user_name, user_id=user_id)
 
 
 # ── Greeting Processor ───────────────────────────────────────────────────────
@@ -78,11 +78,11 @@ class GreetingProcessor(FrameProcessor):
         self._greeted = False
 
     async def process_frame(self, frame: object, direction: FrameDirection):
-        """Forward all frames; inject greeting once on the first StartFrame."""
-        from pipecat.frames.frames import StartFrame
+        """Forward all frames; inject greeting once on the first ClientConnectedFrame."""
+        from pipecat.frames.frames import ClientConnectedFrame
         await super().process_frame(frame, direction)
 
-        if not self._greeted and isinstance(frame, StartFrame):
+        if not self._greeted and isinstance(frame, ClientConnectedFrame):
             self._greeted = True
             logger.info("[Greeting] Pipeline ready — sending audio greeting.")
             await self.push_frame(LLMFullResponseStartFrame())
@@ -113,9 +113,11 @@ class LangGraphLLMService(LLMService):
     # Set to 1 so the agent can respond to single words like "Hello"
     _MIN_WORDS = 1
 
-    def __init__(self, session_id: str = "default"):
+    def __init__(self, session_id: str = "default", user_name: str = "User", user_id: str = ""):
         super().__init__()
         self._session_id = session_id
+        self._user_name = user_name
+        self._user_id = user_id
         self._call_count = 0
 
     async def process_frame(self, frame: object, direction: FrameDirection):
@@ -185,6 +187,8 @@ class LangGraphLLMService(LLMService):
             response_text = await _run_agent_turn(
                 session_id=self._session_id,
                 user_text=user_text,
+                user_name=self._user_name,
+                user_id=self._user_id,
             )
         except asyncio.TimeoutError:
             logger.error(
@@ -224,6 +228,8 @@ async def create_voice_pipeline(
     groq_api_key: str,
     cartesia_api_key: str,
     cartesia_voice_id: str,
+    user_name: str = "User",
+    user_id: str = "",
     vad_analyzer=None,      # accept pre-warmed VAD from prewarm()
     session_id: str | None = None,  # session key for short-term memory
 ) -> PipelineWorker:
@@ -329,7 +335,7 @@ async def create_voice_pipeline(
 
     # ── LLM (LangGraph agent — Cerebras + short-term memory) ───────────
     _session_id = session_id or room_name
-    llm = LangGraphLLMService(session_id=_session_id)
+    llm = LangGraphLLMService(session_id=_session_id, user_name=user_name, user_id=user_id)
     logger.info(f"[Pipeline] LangGraph agent initialised for session '{_session_id}'")
 
     # ── TTS (Cartesia Sonic) ──────────────────────────────────────────────────
@@ -380,6 +386,8 @@ async def run_pipeline(
     groq_api_key: str,
     cartesia_api_key: str,
     cartesia_voice_id: str,
+    user_name: str = "User",
+    user_id: str = "",
     vad_analyzer=None,      #  forwarded from agent_worker prewarm()
     session_id: str | None = None,  # session key for short-term memory
 ):
@@ -394,6 +402,8 @@ async def run_pipeline(
         groq_api_key=groq_api_key,
         cartesia_api_key=cartesia_api_key,
         cartesia_voice_id=cartesia_voice_id,
+        user_name=user_name,
+        user_id=user_id,
         vad_analyzer=vad_analyzer,
         session_id=session_id or room_name,
     )

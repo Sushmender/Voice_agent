@@ -128,7 +128,7 @@ def get_agent_graph():
     return _compiled_graph
 
 
-async def run_agent_turn(session_id: str, user_text: str) -> str:
+async def run_agent_turn(session_id: str, user_text: str, user_name: str = "User", user_id: str = "") -> str:
     """
     Convenience wrapper: run one turn of the agent graph.
 
@@ -138,6 +138,8 @@ async def run_agent_turn(session_id: str, user_text: str) -> str:
     Args:
         session_id: Unique session identifier (e.g., LiveKit room name).
         user_text:  Transcribed user speech from Groq Whisper.
+        user_name:  The name of the user.
+        user_id:    The MongoDB ID of the user.
 
     Returns:
         Response text from the LLM (ready to be synthesised by Cartesia TTS).
@@ -148,6 +150,8 @@ async def run_agent_turn(session_id: str, user_text: str) -> str:
         "messages": [],
         "session_id": session_id,
         "user_input": user_text,
+        "user_name": user_name,
+        "user_id": user_id,
         "tool_name": "",
         "tool_args": {},
         "tool_output": "",

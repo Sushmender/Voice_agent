@@ -188,14 +188,11 @@
   <h1>🎙️ Voice Agent Test Client</h1>
   <p class="subtitle">Connects to your local FastAPI + LiveKit agent</p>
 
-  <label for="apiUrl">FastAPI Server URL</label>
-  <input id="apiUrl" value="http://localhost:8000" />
+  <label for="livekitUrl">LiveKit URL</label>
+  <input id="livekitUrl" value="wss://your-livekit-url" />
 
-  <label for="roomName">Room Name</label>
-  <input id="roomName" value="voice-agent-room" />
-
-  <label for="userName">Your Name</label>
-  <input id="userName" value="tester" />
+  <label for="livekitToken">LiveKit Token</label>
+  <input id="livekitToken" placeholder="eyJhb..." />
 
   <button id="connectBtn" class="btn btn-connect" onclick="connect()">Connect to Agent</button>
   <button id="disconnectBtn" class="btn btn-disconnect" onclick="disconnect()">Disconnect</button>
@@ -252,26 +249,14 @@
   }
 
   async function connect() {
-    const apiUrl  = document.getElementById('apiUrl').value.trim().replace(/\/$/, '');
-    const roomName = document.getElementById('roomName').value.trim();
-    const userName = document.getElementById('userName').value.trim() || 'tester';
+    const livekitUrl  = document.getElementById('livekitUrl').value.trim();
+    const livekitToken = document.getElementById('livekitToken').value.trim();
 
     document.getElementById('errMsg').style.display = 'none';
-    setStatus('connecting', 'Fetching token…');
 
-    // 1. Get a participant token from your FastAPI server
-    let tokenData;
-    try {
-      const res = await fetch(`${apiUrl}/api/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room_name: roomName, participant_name: userName }),
-      });
-      if (!res.ok) throw new Error(`Token API returned ${res.status}`);
-      tokenData = await res.json();
-    } catch (e) {
-      setStatus('error', 'Failed to fetch token');
-      showError('Could not reach FastAPI server. Is it running on ' + apiUrl + '? Error: ' + e.message);
+    if (!livekitUrl || !livekitToken) {
+      setStatus('error', 'Missing URL or Token');
+      showError('Please paste your LiveKit URL and Token from the Swagger UI.');
       return;
     }
 
@@ -325,7 +310,7 @@
     });
 
     try {
-      await room.connect(tokenData.livekit_url, tokenData.token);
+      await room.connect(livekitUrl, livekitToken);
       // Enable microphone so the agent can hear you
       await room.localParticipant.setMicrophoneEnabled(true);
     } catch (e) {

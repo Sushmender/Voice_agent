@@ -26,6 +26,8 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     session_id: str
     user_input: str
+    user_name: str
+    user_id: str
     tool_name: str          # "" means no tool call
     tool_args: dict         # arguments for the tool
     tool_output: str

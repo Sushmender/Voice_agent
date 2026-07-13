@@ -29,15 +29,18 @@ async def signup(user_in: UserCreate):
     # Hash password and save
     hashed_password = get_password_hash(user_in.password)
     user_doc = {
+        "name": user_in.name,
         "email": user_in.email,
         "hashed_password": hashed_password,
-        "voice_id": assigned_voice_id
+        "voice_id": assigned_voice_id,
+        "conversations": []
     }
     
     result = await db.voice_agent_db.users.insert_one(user_doc)
     
     return UserResponse(
         id=str(result.inserted_id),
+        name=user_doc["name"],
         email=user_doc["email"],
         voice_id=user_doc["voice_id"]
     )
@@ -63,6 +66,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 async def read_users_me(current_user: UserInDB = Depends(get_current_user)):
     return UserResponse(
         id=current_user.id,
+        name=current_user.name,
         email=current_user.email,
         voice_id=current_user.voice_id
     )

@@ -209,7 +209,11 @@ async def get_participant_token(
     """
     identity = request.participant_identity or f"user-{uuid.uuid4().hex[:8]}"
     import json
-    metadata_json = json.dumps({"voice_id": current_user.voice_id})
+    metadata_json = json.dumps({
+        "voice_id": current_user.voice_id,
+        "user_name": current_user.name,
+        "user_id": current_user.id
+    })
     try:
         token = _create_token_with_metadata(
             room_name=request.room_name,
@@ -233,7 +237,13 @@ async def get_participant_token(
                 can_subscribe=True,
             )
             task = asyncio.create_task(
-                _run_pipeline_task(room_name, agent_token, current_user.voice_id),
+                _run_pipeline_task(
+                    room_name=room_name,
+                    agent_token=agent_token,
+                    voice_id=current_user.voice_id,
+                    user_name=current_user.name,
+                    user_id=current_user.id
+                ),
                 name=f"pipeline-{room_name}",
             )
             _active_pipelines[room_name] = task
@@ -252,7 +262,7 @@ async def get_participant_token(
         raise HTTPException(status_code=500, detail=f"Token generation failed: {str(e)}")
 
 
-async def _run_pipeline_task(room_name: str, agent_token: str, voice_id: str):
+async def _run_pipeline_task(room_name: str, agent_token: str, voice_id: str, user_name: str, user_id: str):
     """Background asyncio task: run the Pipecat pipeline until the room empties."""
     logger.info(f"[Pipeline] Starting for room '{room_name}'...")
     try:
@@ -263,6 +273,8 @@ async def _run_pipeline_task(room_name: str, agent_token: str, voice_id: str):
             groq_api_key=settings.groq_api_key,
             cartesia_api_key=settings.cartesia_api_key,
             cartesia_voice_id=voice_id,
+            user_name=user_name,
+            user_id=user_id
         )
     except asyncio.CancelledError:
         logger.info(f"[Pipeline] Cancelled for room '{room_name}'")

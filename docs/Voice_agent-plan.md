@@ -114,6 +114,19 @@ voice_agent/
 │   ├── config.py                # Pydantic BaseSettings (reads .env)
 │   ├── agent_worker.py          # LiveKit Agent entrypoint (auto-run by main)
 │   │
+│   ├── api/
+│   │   └── auth_routes.py       # FastAPI routes for signup, login, and profile
+│   │
+│   ├── auth/
+│   │   ├── deps.py              # FastAPI dependencies (get_current_user)
+│   │   └── security.py          # Password hashing and JWT generation
+│   │
+│   ├── db/
+│   │   └── mongodb.py           # MongoDB connection lifecycle and client
+│   │
+│   ├── models/
+│   │   └── user.py              # Pydantic schemas for User and TokenData
+│   │
 │   ├── pipeline/
 │   │   ├── latency_logger.py    # Latency tracking utilities
 │   │   └── voice_pipeline.py    # Pipecat pipeline: VAD→Groq STT→Agent→Cartesia TTS
@@ -121,7 +134,7 @@ voice_agent/
 │   ├── agent/
 │   │   ├── graph.py             # LangGraph StateGraph definition
 │   │   ├── state.py             # AgentState TypedDict
-│   │   ├── nodes.py             # node functions (memory, llm, tools)
+│   │   ├── nodes.py             # node functions (memory, llm, tools, logging)
 │   │   └── prompts.py           # System prompt
 │   │
 │   ├── memory/

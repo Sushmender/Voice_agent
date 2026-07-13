@@ -24,6 +24,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from backend.agent.prompts import FALLBACK_MESSAGE, TOOL_ERROR_MESSAGE, VOICE_AGENT_SYSTEM_PROMPT
 from backend.agent.state import AgentState
 from backend.config import get_settings
+from backend.db.mongodb import get_database
 import backend.memory.short_term as memory
 
 logger = logging.getLogger(__name__)
@@ -176,8 +177,11 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
     session_id = state.get("session_id", "default")
     messages = list(state.get("messages", []))
 
+    user_name = state.get("user_name", "User")
+    system_prompt = VOICE_AGENT_SYSTEM_PROMPT + f"\n\nYou are speaking with {user_name}. (You don't need to use their name every time, just be aware of who they are)."
+
     # Build the messages list for the Cerebras API
-    api_messages = [{"role": "system", "content": VOICE_AGENT_SYSTEM_PROMPT}]
+    api_messages = [{"role": "system", "content": system_prompt}]
     for msg in messages:
         if isinstance(msg, HumanMessage):
             api_messages.append({"role": "user", "content": str(msg.content)})
@@ -364,8 +368,11 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
         f"formatting result for tool '{tool_name}'"
     )
 
+    user_name = state.get("user_name", "User")
+    system_prompt = VOICE_AGENT_SYSTEM_PROMPT + f"\n\nYou are speaking with {user_name}. (You don't need to use their name every time, just be aware of who they are)."
+
     # Build context: inject the tool result as an assistant turn
-    api_messages = [{"role": "system", "content": VOICE_AGENT_SYSTEM_PROMPT}]
+    api_messages = [{"role": "system", "content": system_prompt}]
     for msg in messages:
         if isinstance(msg, HumanMessage):
             api_messages.append({"role": "user", "content": str(msg.content)})
@@ -410,13 +417,15 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
     }
 
 
-def save_memory(state: AgentState) -> dict[str, Any]:
+async def save_memory(state: AgentState) -> dict[str, Any]:
     """
     Node: save_memory
     -----------------
     Persist the latest human + assistant message exchange to short-term memory.
+    Also log the exchange to the user's conversation history in MongoDB.
     """
     session_id = state.get("session_id", "default")
+    user_id = state.get("user_id", "")
     messages = list(state.get("messages", []))
 
     last_human: str | None = None
@@ -434,6 +443,27 @@ def save_memory(state: AgentState) -> dict[str, Any]:
         memory.add_user_message(session_id, last_human)
     if last_ai:
         memory.add_assistant_message(session_id, last_ai)
+
+    if last_human and last_ai and user_id:
+        from datetime import datetime
+        now = datetime.utcnow()
+        conv_log = {
+            "Date": now.strftime("%Y-%m-%d"),
+            "Time": now.strftime("%H:%M:%S"),
+            "User_query": last_human,
+            "LLM_response": last_ai,
+            "Tools_Used": state.get("tool_name") or None
+        }
+        db = get_database()
+        if db is not None:
+            from bson.objectid import ObjectId
+            try:
+                await db.voice_agent_db.users.update_one(
+                    {"_id": ObjectId(user_id)},
+                    {"$push": {"conversations": conv_log}}
+                )
+            except Exception as e:
+                logger.error(f"[save_memory] Failed to log conversation: {e}")
 
     turn_count = memory.get_session_length(session_id)
     logger.debug(
