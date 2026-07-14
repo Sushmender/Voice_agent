@@ -352,7 +352,7 @@ class TestLangGraphLLMService:
 
         with patch(
             "backend.pipeline.voice_pipeline._run_agent_turn",
-            new=AsyncMock(return_value="Hello from LangGraph!"),
+            new=AsyncMock(return_value={"response": "Hello from LangGraph!", "tool_name": "", "tool_output": ""}),
         ):
             frame = LLMMessagesAppendFrame(
                 messages=[{"role": "user", "content": "Hi there"}]
@@ -379,7 +379,7 @@ class TestLangGraphLLMService:
 
         with patch(
             "backend.pipeline.voice_pipeline._run_agent_turn",
-            new=AsyncMock(return_value="A response"),
+            new=AsyncMock(return_value={"response": "A response", "tool_name": "", "tool_output": ""}),
         ):
             frame = LLMMessagesAppendFrame(
                 messages=[{"role": "user", "content": "Hello there"}]
@@ -400,7 +400,7 @@ class TestLangGraphLLMService:
 
         with patch(
             "backend.pipeline.voice_pipeline._run_agent_turn",
-            new=AsyncMock(return_value="Should not appear"),
+            new=AsyncMock(return_value={"response": "Should not appear", "tool_name": "", "tool_output": ""}),
         ) as mock_run:
             frame = LLMMessagesAppendFrame(
                 messages=[{"role": "assistant", "content": "prior turn"}]
@@ -423,7 +423,7 @@ class TestLangGraphLLMService:
 
         with patch(
             "backend.pipeline.voice_pipeline._run_agent_turn",
-            new=AsyncMock(return_value="Reply"),
+            new=AsyncMock(return_value={"response": "Reply", "tool_name": "", "tool_output": ""}),
         ):
             frame = LLMMessagesAppendFrame(
                 messages=[{"role": "user", "content": "Turn 1"}]
@@ -442,8 +442,8 @@ class TestRunAgentTurn:
     """Test the run_agent_turn() wrapper with a mocked Cerebras client."""
 
     @pytest.mark.asyncio
-    async def test_run_agent_turn_returns_string(self):
-        """run_agent_turn() must return a plain string."""
+    async def test_run_agent_turn_returns_dict(self):
+        """run_agent_turn() must return a dict with 'response', 'tool_name', 'tool_output'."""
         mock_completion = MagicMock()
         mock_completion.choices = [MagicMock()]
         mock_completion.choices[0].message.content = "I'm doing great!"
@@ -458,8 +458,11 @@ class TestRunAgentTurn:
             from backend.agent.graph import run_agent_turn
             result = await run_agent_turn("rat-test", "How are you?")
 
-        assert isinstance(result, str)
-        assert len(result) > 0
+        assert isinstance(result, dict)
+        assert isinstance(result["response"], str)
+        assert len(result["response"]) > 0
+        assert "tool_name" in result
+        assert "tool_output" in result
 
     @pytest.mark.asyncio
     async def test_run_agent_turn_updates_memory(self):
@@ -523,15 +526,16 @@ class TestDay3Milestone:
 
     @pytest.mark.asyncio
     async def test_agent_acknowledges_name(self):
-        """Turn 1: 'My name is Alice' → agent returns an acknowledgement."""
+        """Turn 1: 'My name is Alice' → agent returns an acknowledgement dict."""
         client = self._mock_client(["Nice to meet you, Alice!"])
 
         with patch("backend.agent.nodes._get_cerebras_client", return_value=client):
             from backend.agent.graph import run_agent_turn
-            response = await run_agent_turn("milestone-session", "My name is Alice")
+            result = await run_agent_turn("milestone-session", "My name is Alice")
 
-        assert isinstance(response, str)
-        assert len(response) > 0
+        assert isinstance(result, dict)
+        assert isinstance(result["response"], str)
+        assert len(result["response"]) > 0
 
     @pytest.mark.asyncio
     async def test_memory_carries_name_across_turns(self):

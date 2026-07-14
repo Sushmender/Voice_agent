@@ -452,7 +452,8 @@ async def save_memory(state: AgentState) -> dict[str, Any]:
             "Time": now.strftime("%H:%M:%S"),
             "User_query": last_human,
             "LLM_response": last_ai,
-            "Tools_Used": state.get("tool_name") or None
+            "Tools_Used": state.get("tool_name") or None,
+            "session_id": session_id,  # enables grouping conversations by session
         }
         db = get_database()
         if db is not None:

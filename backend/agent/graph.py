@@ -128,12 +128,17 @@ def get_agent_graph():
     return _compiled_graph
 
 
-async def run_agent_turn(session_id: str, user_text: str, user_name: str = "User", user_id: str = "") -> str:
+async def run_agent_turn(
+    session_id: str,
+    user_text: str,
+    user_name: str = "User",
+    user_id: str = "",
+) -> dict:
     """
     Convenience wrapper: run one turn of the agent graph.
 
     Packages the user utterance as a HumanMessage, invokes the full graph,
-    and returns the plain-text response string for TTS.
+    and returns a dict with the response text and tool metadata.
 
     Args:
         session_id: Unique session identifier (e.g., LiveKit room name).
@@ -142,7 +147,11 @@ async def run_agent_turn(session_id: str, user_text: str, user_name: str = "User
         user_id:    The MongoDB ID of the user.
 
     Returns:
-        Response text from the LLM (ready to be synthesised by Cartesia TTS).
+        dict: {
+            "response":     str  — plain-text LLM response for TTS,
+            "tool_name":    str  — name of tool called (empty string if none),
+            "tool_output":  str  — raw tool result (empty string if no tool),
+        }
     """
     graph = get_agent_graph()
 
@@ -164,10 +173,17 @@ async def run_agent_turn(session_id: str, user_text: str, user_name: str = "User
     )
 
     result = await graph.ainvoke(initial_state)
+
     response = result.get("response", "")
+    tool_name = result.get("tool_name", "")
+    tool_output = result.get("tool_output", "")
 
     logger.info(
         f"[run_agent_turn] Session '{session_id}': "
-        f"response='{response[:80]}'"
+        f"response='{response[:80]}' | tool='{tool_name or 'none'}'"
     )
-    return response
+    return {
+        "response": response,
+        "tool_name": tool_name,
+        "tool_output": tool_output,
+    }
