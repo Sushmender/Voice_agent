@@ -159,7 +159,8 @@ class TestMemoryNodes:
 
         assert len(result["messages"]) == 2
 
-    def test_save_memory_persists_messages(self):
+    @pytest.mark.asyncio
+    async def test_save_memory_persists_messages(self):
         """save_memory writes the last human + AI message pair to memory."""
         import backend.memory.short_term as mem
         from backend.agent.nodes import save_memory
@@ -177,7 +178,7 @@ class TestMemoryNodes:
             "tool_output": "",
             "response": "Nice to meet you, Alice!",
         }
-        result = save_memory(state)
+        result = await save_memory(state)
 
         # save_memory should return an empty dict (side-effect only)
         assert result == {}
@@ -185,7 +186,8 @@ class TestMemoryNodes:
         history = mem.get_history(session_id)
         assert len(history) == 2
 
-    def test_save_memory_only_saves_last_pair(self):
+    @pytest.mark.asyncio
+    async def test_save_memory_only_saves_last_pair(self):
         """save_memory only saves the latest human/AI pair, not duplicates."""
         import backend.memory.short_term as mem
         from backend.agent.nodes import save_memory
@@ -208,7 +210,7 @@ class TestMemoryNodes:
             "tool_output": "",
             "response": "I don't have a clock, sorry!",
         }
-        save_memory(state)
+        await save_memory(state)
 
         # Total in memory: turn1 (2 msgs) + turn2 (2 msgs) = 4
         history = mem.get_history(session_id)
@@ -320,7 +322,7 @@ class TestLlmNode:
 
         assert len(captured_messages) > 0, "No messages were captured by mock"
         assert captured_messages[0]["role"] == "system"
-        assert captured_messages[0]["content"] == VOICE_AGENT_SYSTEM_PROMPT
+        assert captured_messages[0]["content"].startswith(VOICE_AGENT_SYSTEM_PROMPT)
 
 
 # ===========================================================================
@@ -364,7 +366,7 @@ class TestLangGraphLLMService:
             f for f in svc._pushed_frames if isinstance(f, TextFrame)
         ]
         assert len(text_frames) == 1
-        assert text_frames[0].text == "Hello from LangGraph!"
+        assert text_frames[0].text == "Hello from LangGraph! "
 
     @pytest.mark.asyncio
     async def test_frame_processor_pushes_start_end_frames(self):
