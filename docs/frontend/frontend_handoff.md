@@ -50,4 +50,11 @@ To implement the frontend successfully, please read the following documents in o
 - **Automatic Pipeline Launch:** When the frontend requests a LiveKit token via `POST /api/token`, the backend automatically launches the Pipecat voice pipeline for that room. The frontend *does not* need to explicitly trigger the agent.
 - **Agent Warmup Time:** It takes approximately 3-5 seconds for the agent pipeline to pre-warm models and connect to LiveKit. The frontend must display a "Warming up" state during this period.
 - **Audio Greeting:** The agent will automatically say "Hi, I'm ready!" exactly when it finishes connecting. The frontend must subscribe to the audio track to hear this.
-- **Transcripts:** Real-time transcripts are sent via LiveKit Data Channels, not via REST or WebSockets.
+- **Transcripts & Tool Events:** Real-time transcripts and tool events are sent via LiveKit Data Channels, not via REST or WebSockets. See [`livekit_contract.md`](./livekit_contract.md) for the full event schema.
+- **Barge-In (Interruption) — Backend Fully Handles It:** The pipeline includes `InterruptionHandlerProcessor` and `BotSpeakingTracker` (commit `73ce0d7`). When a user speaks while the agent is talking:
+  1. Cartesia TTS stops immediately (mid-stream).
+  2. The LLM turn is cancelled cleanly.
+  3. A new STT transcription starts for the user's interrupting speech.
+  4. A **user DataChannel transcript** arrives at the frontend — this is your signal to reset the "agent speaking" UI.
+  5. The agent's next response will begin with a natural acknowledgement word ("Gotcha", "Sure", etc.).
+  - **Frontend rule:** Never mute the mic while the agent speaks. Never suppress the acknowledgement word from the agent's next transcript. See [`event_flow.md`](./event_flow.md) for the full sequence diagram.
