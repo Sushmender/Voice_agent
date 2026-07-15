@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, MessageSquare, Clock, ChevronRight } from 'lucide-react';
 import { useGetSessions } from '../../auth/hooks/useAuth';
