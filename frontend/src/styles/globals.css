@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Variables ──────────────────────────────────────────────────────────── */
+:root {
+  --bg: #0a0b0f;
+  --bg-deep: #060709;
+  --surface: #111218;
+  --surface-raised: #161820;
+  --surface-overlay: #1c1e28;
+  --border: #1e2030;
+  --border-subtle: #161825;
+  --border-bright: #2d3050;
+
+  --accent-indigo: #6366f1;
+  --accent-violet: #8b5cf6;
+  --accent-cyan: #22d3ee;
+  --accent-emerald: #10b981;
+
+  --text-primary: #f1f2f7;
+  --text-secondary: #a0a3b8;
+  --text-muted: #5c6080;
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text-primary);
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  ::selection {
+    background-color: rgba(99, 102, 241, 0.35);
+    color: #fff;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-bright);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-indigo);
+  }
+}
+
+/* ── Components ─────────────────────────────────────────────────────────────── */
+@layer components {
+  /* Input field */
+  .input-field {
+    @apply w-full rounded-xl border border-border bg-surface-raised px-4 py-2.5 text-sm text-text-primary
+           placeholder:text-text-muted outline-none
+           focus:border-accent-indigo focus:ring-2 focus:ring-accent-indigo/20
+           transition-all duration-200;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply w-full rounded-xl bg-accent-indigo px-4 py-2.5 text-sm font-semibold text-white
+           hover:bg-accent-violet active:scale-[0.97]
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-all duration-200;
+  }
+
+  /* Secondary / ghost button */
+  .btn-ghost {
+    @apply rounded-xl border border-border bg-surface-raised px-4 py-2.5 text-sm font-medium text-text-secondary
+           hover:border-border-bright hover:text-text-primary
+           transition-all duration-200;
+  }
+
+  /* Glassmorphism card */
+  .glass-card {
+    @apply rounded-2xl border border-border bg-surface/80 backdrop-blur-sm shadow-card;
+  }
+
+  /* Sidebar item */
+  .sidebar-item {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-text-muted
+           hover:bg-surface-raised hover:text-text-primary
+           transition-all duration-150 cursor-pointer;
+  }
+  .sidebar-item.active {
+    @apply bg-accent-indigo/10 text-accent-indigo border border-accent-indigo/20;
+  }
+
+  /* Status dot */
+  .status-dot {
+    @apply inline-block w-2 h-2 rounded-full;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply rounded-xl bg-surface-raised animate-pulse;
+    background: linear-gradient(
+      90deg,
+      var(--surface-raised) 25%,
+      var(--surface-overlay) 50%,
+      var(--surface-raised) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* ── Utilities ──────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .border-gradient {
+    border: 1px solid transparent;
+    background: linear-gradient(var(--surface), var(--surface)) padding-box,
+                linear-gradient(135deg, var(--accent-indigo), var(--accent-violet)) border-box;
+  }
+}

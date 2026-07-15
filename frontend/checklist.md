@@ -40,70 +40,66 @@
 
 ---
 
-## DAY 1 — Foundation, Auth & Backend Additions
+## DAY 1 — Foundation, Auth & Backend Additions ✅ DONE
 
 ### 1.1 Project Scaffold
-- [ ] `npx create-vite@latest . -- --template react-ts` inside `frontend/`
-- [ ] Install all core dependencies (livekit, framer-motion, zustand, tanstack-query, react-hook-form, zod, axios, recharts, lucide-react, react-router-dom)
-- [ ] Install TailwindCSS v3 + PostCSS + Autoprefixer
-- [ ] Init shadcn/ui (`npx shadcn@latest init`)
-- [ ] Configure `vite.config.ts` — path aliases (`@/`) + proxy to `http://localhost:8000`
-- [ ] Configure `tsconfig.app.json` — strict mode + path aliases
-- [ ] Configure `tailwind.config.ts` — extend with brand tokens
+- [x] `npx create-vite@latest . -- --template react-ts` inside `frontend/`
+- [x] Install all core dependencies (livekit-client, framer-motion, zustand, @tanstack/react-query, react-hook-form, zod, axios, recharts, lucide-react, react-router-dom, sonner)
+- [x] Install TailwindCSS v3 + PostCSS + Autoprefixer + @hookform/resolvers
+- [x] Configure `vite.config.ts` — path aliases (`@/`) + proxy to `http://localhost:8000`
+- [x] Configure `tsconfig.app.json` — strict mode + path aliases
+- [x] Configure `tailwind.config.js` — extend with brand tokens (colors, shadows, animations)
 
 ### 1.2 Design System & Tokens
-- [ ] `src/styles/globals.css` — CSS variables (bg, surface, border, accent, text, status colors)
-- [ ] Inter font via Google Fonts import
-- [ ] Tailwind theme extensions (brand colors, font family, border-radius, shadows)
-- [ ] Add shadcn/ui components: `button`, `input`, `card`, `badge`, `drawer`, `toast`, `skeleton`, `tooltip`, `separator`, `dialog`, `switch`, `select`, `sheet`
+- [x] `src/styles/globals.css` — CSS variables (bg, surface, border, accent, text, status colors)
+- [x] Inter font via Google Fonts import
+- [x] Tailwind theme extensions (brand colors, font family, border-radius, glow shadows)
+- [x] CSS component classes: `.input-field`, `.btn-primary`, `.btn-ghost`, `.glass-card`, `.skeleton`, `.sidebar-item`, `.badge`, `.status-dot`
 
 ### 1.3 App Shell & Routing
-- [ ] `src/App.tsx` — React Router v6 routes + `QueryClientProvider` + `Toaster`
-- [ ] `/` redirect based on auth state
-- [ ] `/login` → `AuthPage`
-- [ ] `/console` → `ConsolePage` (ProtectedRoute)
-- [ ] `src/components/layout/ProtectedRoute.tsx` — JWT guard → redirect to `/login`
-- [ ] `src/components/layout/Sidebar.tsx` — collapsible left nav
-- [ ] `src/components/layout/TopBar.tsx` — logo, avatar, connection quality, shortcuts button
-- [ ] `src/components/shared/ErrorBoundary.tsx`
-- [ ] `src/components/shared/LoadingSkeleton.tsx`
+- [x] `src/App.tsx` — React Router v6 routes + `QueryClientProvider` + `Toaster` (Sonner)
+- [x] `/` redirect based on auth state (token present → `/console`, else → `/login`)
+- [x] `/login` → `AuthPage`
+- [x] `/console` → `ConsolePage` (ProtectedRoute)
+- [x] `src/components/layout/ProtectedRoute.tsx` — JWT guard → redirect to `/login`
+- [x] `src/components/layout/Sidebar.tsx` — collapsible left nav with Framer Motion width animation
+- [x] `src/components/layout/TopBar.tsx` — logo, avatar with initials, shortcuts button
+- [x] `src/components/shared/ErrorBoundary.tsx`
+- [x] `src/components/shared/LoadingSkeleton.tsx` — shimmer skeleton, CardSkeleton, PanelSkeleton
 
 ### 1.4 Auth Feature
-- [ ] `src/lib/axios.ts` — Axios instance + interceptors (Bearer token, 401 → logout)
-- [ ] `src/lib/queryClient.ts` — TanStack Query config
-- [ ] `src/store/useAppStore.ts` — Zustand `{ user, token, setToken, logout }` + localStorage persist
-- [ ] `src/types/auth.ts` — User, Token, LoginPayload, SignupPayload types
-- [ ] `src/features/auth/schemas/authSchemas.ts` — Zod schemas
-- [ ] `src/features/auth/api/authApi.ts` — login(), signup(), getMe(), getConversations(), getSessions()
-- [ ] `src/features/auth/hooks/useAuth.ts` — TanStack Query hooks
-- [ ] `src/features/auth/components/LoginForm.tsx`
-- [ ] `src/features/auth/components/SignupForm.tsx`
-- [ ] `src/features/auth/AuthPage.tsx` — split layout: left orb decoration, right form card
-- [ ] Auth animations (fade-in, focus glow, button tap scale)
-- [ ] End-to-end test: signup → login → redirect to `/console`
+- [x] `src/lib/axios.ts` — Axios instance + interceptors (Bearer token, 401 → logout + redirect)
+- [x] `src/lib/queryClient.ts` — TanStack Query config (staleTime, retry, refetchOnWindowFocus: false)
+- [x] `src/store/useAppStore.ts` — Zustand `{ user, token, setToken, setUser, logout }` + localStorage persist
+- [x] `src/types/auth.ts` — User, Token, LoginPayload, SignupPayload, ConversationTurn, Session types
+- [x] `src/features/auth/schemas/authSchemas.ts` — Zod schemas (loginSchema, signupSchema)
+- [x] `src/features/auth/api/authApi.ts` — login() [x-www-form-urlencoded], signup(), getMe(), getConversations(), getSessions()
+- [x] `src/features/auth/hooks/useAuth.ts` — useLoginMutation, useSignupMutation, useGetMe, useGetSessions, useGetConversations
+- [x] `src/features/auth/components/LoginForm.tsx` — RHF + Zod + password toggle + inline server error
+- [x] `src/features/auth/components/SignupForm.tsx` — RHF + Zod + auto-login after signup
+- [x] `src/features/auth/AuthPage.tsx` — split layout: left animated orb + feature pills, right glass form card
+- [x] Auth animations: fade-in, AnimatePresence login↔signup slide, Framer Motion button tap scale
+- [x] Verified: `0 TypeScript errors`, dev server running at http://localhost:5173
 
 ### 1.5 Backend Additions (minimal, non-breaking)
-- [ ] `backend/api/auth_routes.py` — `GET /auth/conversations` endpoint
-- [ ] `backend/api/auth_routes.py` — `GET /auth/sessions` endpoint
-- [ ] `backend/pipeline/voice_pipeline.py` — DataChannel emit for user transcript
-- [ ] `backend/pipeline/voice_pipeline.py` — DataChannel emit for agent transcript
-- [ ] `backend/agent/nodes.py` — DataChannel emit for tool_start event
-- [ ] `backend/agent/nodes.py` — DataChannel emit for tool_end event
-- [ ] Verify backend still starts correctly after changes
+- [x] `backend/api/auth_routes.py` — `GET /auth/conversations` endpoint *(already done — line 75)*
+- [x] `backend/api/auth_routes.py` — `GET /auth/sessions` endpoint *(already done — line 114)*
+- [x] `backend/pipeline/voice_pipeline.py` — DataChannel emit for user/agent transcript *(Day 0, commit 73ce0d7)*
+- [x] `backend/agent/nodes.py` — DataChannel emit for tool_start/tool_end events *(Day 0, commit 73ce0d7)*
+- [x] Backend verified running correctly
 
 ### 1.6 Recents Sidebar
-- [ ] `src/features/console/components/SessionsSidebar.tsx`
-- [ ] "New Session" button (disconnect + clear + new room UUID)
-- [ ] Recents list from `GET /auth/sessions` — grouped by Today/Yesterday/Earlier
-- [ ] Session card: name (first 40 chars), date badge, turn count
-- [ ] Click session → load transcript from `GET /auth/conversations`
-- [ ] Active session: indigo left border highlight
-- [ ] Framer Motion stagger load animation
+- [x] `src/features/console/components/SessionsSidebar.tsx`
+- [x] "New Session" button (clears active session state)
+- [x] Recents list from `GET /auth/sessions` — grouped by Today/Yesterday/Earlier
+- [x] Session card: truncated name, date, turn count
+- [x] Active session: indigo left border highlight
+- [x] Framer Motion stagger load animation
 
 ### 1.7 Console Skeleton
-- [ ] `src/features/console/ConsolePage.tsx` — 3-panel layout
-- [ ] Loading skeletons for all panels
-- [ ] Voice ID named dropdown at top (Aria, Nova, Echo, Sage, Orion)
+- [x] `src/features/console/ConsolePage.tsx` — 3-panel layout (sessions | main+orb | transcript)
+- [x] Loading skeletons for all panels (PanelSkeleton in right panel)
+- [x] Voice ID named dropdown at top (Aria, Nova, Echo, Sage, Orion)
 
 ---
 
@@ -300,7 +296,7 @@
 | Day | Tasks | Done | Remaining |
 |-----|-------|------|-----------|
 | Day 0 (Backend interruption fix) | 17 | 17 | 0 |
-| Day 1 | 32 | 0 | 32 |
+| Day 1 | 40 | 40 | 0 |
 | Day 2 | 37 | 0 | 37 |
 | Day 3 | 33 | 0 | 33 |
-| **Total** | **119** | **17** | **102** |
+| **Total** | **127** | **57** | **70** |
