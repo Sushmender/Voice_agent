@@ -297,6 +297,136 @@
   }
 }
 
+/* ── Extra keyframes (orb states) ───────────────────────────────────────────── */
+@keyframes orb-error-shake {
+  0%,100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(6px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+@keyframes orb-outer-listen {
+  from { transform: scale(1); }
+  to   { transform: scale(1.03); }
+}
+@keyframes ripple-out {
+  from { transform: scale(1);    opacity: 0.6; }
+  to   { transform: scale(1.75); opacity: 0; }
+}
+@keyframes progress-fill {
+  from { width: 0%; }
+  to   { width: 80%; }
+}
+@keyframes bar-idle-anim {
+  0%,100% { transform: scaleY(0.22); }
+  50%      { transform: scaleY(0.38); }
+}
+@keyframes bar-bounce-anim {
+  0%,100% { transform: scaleY(0.18); }
+  50%      { transform: scaleY(1); }
+}
+@keyframes dot-pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Audio bar classes ──────────────────────────────────────────────────────── */
+@layer components {
+  .viz-bar-idle {
+    background: var(--text-ghost);
+    animation: bar-idle-anim 3.5s ease-in-out infinite;
+    transform-origin: bottom;
+  }
+  .viz-bar-listening {
+    background: linear-gradient(to top, var(--accent-blue), #60a5fa);
+    animation: bar-bounce-anim 0.7s ease-in-out infinite;
+    transform-origin: bottom;
+  }
+  .viz-bar-speaking {
+    background: linear-gradient(to top, var(--accent-indigo), var(--accent-violet));
+    animation: bar-bounce-anim 0.85s ease-in-out infinite;
+    transform-origin: bottom;
+  }
+  .viz-bar-warming {
+    background: linear-gradient(to top, var(--status-connecting), #fcd34d);
+    animation: bar-idle-anim 2s ease-in-out infinite;
+    transform-origin: bottom;
+  }
+
+  /* Glass inner — for nested elements */
+  .glass-inner {
+    background: rgba(6,9,18,0.72);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  /* Btn icon-circle (control bar) */
+  .btn-icon-circle {
+    border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 150ms var(--ease-standard);
+    flex-shrink: 0;
+  }
+  .btn-icon-circle:hover {
+    border-color: var(--border-active);
+    background: var(--bg-hover);
+  }
+  .btn-icon-circle:active { transform: scale(0.93); }
+  .btn-icon-circle.muted {
+    background: rgba(239,68,68,0.15);
+    border-color: rgba(239,68,68,0.4);
+    box-shadow: 0 0 16px rgba(239,68,68,0.3);
+  }
+
+  /* Btn danger */
+  .btn-danger {
+    background: rgba(239,68,68,0.14);
+    color: var(--status-error);
+    border: 1px solid rgba(239,68,68,0.32);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 150ms var(--ease-standard);
+  }
+  .btn-danger:hover {
+    background: rgba(239,68,68,0.24);
+    box-shadow: 0 8px 24px rgba(239,68,68,0.38);
+  }
+  .btn-danger:active { transform: scale(0.97); }
+  .btn-danger:disabled { opacity: 0.42; cursor: not-allowed; }
+
+  /* Btn secondary */
+  .btn-secondary {
+    background: rgba(99,102,241,0.10);
+    color: var(--accent-indigo);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms var(--ease-standard);
+  }
+  .btn-secondary:hover {
+    background: rgba(99,102,241,0.18);
+    border-color: var(--border-active);
+    color: #a5b4fc;
+  }
+  .btn-secondary:active { transform: scale(0.97); }
+}
+
 /* ── Utilities ──────────────────────────────────────────────────────────────── */
 @layer utilities {
   /* Shimmer heading — display text only */
