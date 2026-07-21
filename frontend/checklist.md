@@ -236,87 +236,87 @@
 ## DAY 3 — Advanced Features, Polish & Delivery
 
 ### 3.1 Tool Execution Timeline
-- [ ] `src/features/console/components/ToolTimeline.tsx`
-  - [ ] Vertical timeline per session
-  - [ ] Lucide icons per tool type
-  - [ ] Status: running (Loader2) / success (CheckCircle2) / error (XCircle)
-  - [ ] Duration pill + Framer Motion stagger
+- [x] `src/features/console/components/ToolTimeline.tsx`
+  - [x] Vertical timeline per session
+  - [x] Lucide icons per tool type
+  - [x] Status: running (Loader2) / success (CheckCircle2) / error (XCircle)
+  - [x] Duration pill + Framer Motion stagger
 
 ### 3.2 Session Memory Viewer
-- [ ] `src/features/console/components/MemoryViewer.tsx`
-  - [ ] Collapsible panel, turn counter badge
-  - [ ] "Clear Session" button + confirmation
+- [x] `src/features/console/components/MemoryViewer.tsx`
+  - [x] Collapsible panel, turn counter badge
+  - [x] "Clear Session" button + confirmation
 
 ### 3.3 Latency Metrics Panel
-- [ ] `src/features/console/hooks/useLatency.ts` — per-turn latency tracking
-- [ ] `src/features/console/components/LatencyPanel.tsx`
-  - [ ] Recharts AreaChart
-  - [ ] Avg/P95 metric cards
-  - [ ] Color coded (green/yellow/red)
-  - [ ] Dev mode only
+- [x] `src/features/console/hooks/useLatency.ts` — per-turn latency tracking
+- [x] `src/features/console/components/LatencyPanel.tsx`
+  - [x] Recharts AreaChart
+  - [x] Avg/P95 metric cards
+  - [x] Color coded (green/yellow/red)
+  - [x] Dev mode only
 
 ### 3.4 Settings Drawer
-- [ ] `src/features/settings/components/SettingsDrawer.tsx`
-  - [ ] Voice dropdown (Aria, Nova, Echo, Sage, Orion)
-  - [ ] Dev mode toggle
-  - [ ] Clear session danger button + confirm dialog
-  - [ ] Persisted in useSettingsStore
+- [x] `src/features/settings/components/SettingsDrawer.tsx`
+  - [x] Voice dropdown (Aria, Nova, Echo, Sage, Orion)
+  - [x] Dev mode toggle
+  - [x] Clear session danger button + confirm dialog
+  - [x] Persisted in useSettingsStore
 
 ### 3.5 History Page
-- [ ] `src/features/history/HistoryPage.tsx`
-  - [ ] Session list sorted newest first
-  - [ ] Session card: date, turns, duration, first message
-  - [ ] Click → full transcript modal
-  - [ ] Empty state + loading skeletons
+- [x] `src/features/history/HistoryPage.tsx`
+  - [x] Session list sorted newest first
+  - [x] Session card: date, turns, duration, first message
+  - [x] Click → full transcript modal
+  - [x] Empty state + loading skeletons
 
 ### 3.6 Error Handling Polish
-- [ ] All API errors → toast + inline error
-- [ ] ErrorBoundary wraps all routes
-- [ ] Mic NotAllowedError → banner with instructions
-- [ ] Mic NotFoundError → banner
-- [ ] Pipeline timeout → retry button
-- [ ] 401 mid-session → auto logout
+- [x] All API errors → toast + inline error
+- [x] ErrorBoundary wraps all routes
+- [x] Mic NotAllowedError → banner with instructions
+- [x] Mic NotFoundError → banner
+- [x] Pipeline timeout → retry button
+- [x] 401 mid-session → auto logout
 
 ### 3.7 Animation Polish
-- [ ] Route transitions (Framer Motion AnimatePresence)
-- [ ] Sidebar collapse animation
-- [ ] Orb final polish — all 8 state transitions tested
-- [ ] prefers-reduced-motion media query disables animations
+- [x] Route transitions (Framer Motion AnimatePresence)
+- [x] Sidebar collapse animation
+- [x] Orb final polish — all 8 state transitions tested
+- [x] prefers-reduced-motion media query disables animations
 
 ### 3.8 Accessibility
-- [ ] aria-live="polite" on transcript panel
-- [ ] aria-label on all icon buttons
-- [ ] Focus trap in drawers and modals
-- [ ] Tab-navigable control bar
-- [ ] 44×44px minimum touch targets
+- [x] aria-live="polite" on transcript panel
+- [x] aria-label on all icon buttons
+- [x] Focus trap in drawers and modals
+- [x] Tab-navigable control bar
+- [x] 44×44px minimum touch targets
 
 ### 3.9 Build Validation
-- [ ] `npm run type-check` → 0 TypeScript errors
-- [ ] `npm run lint` → 0 ESLint warnings
-- [ ] `npm run build` → clean production bundle
+- [x] `npm run type-check` → 0 TypeScript errors
+- [x] `npm run lint` → 0 ESLint warnings
+- [x] `npm run build` → clean production bundle
 
 ### 3.10 App Instructions File
-- [ ] `app_instructions.md` in repo root
-  - [ ] Prerequisites (Node 20+, Python 3.11+, .env setup)
-  - [ ] Backend: install deps → start FastAPI → start agent worker
-  - [ ] Frontend: install deps → `npm run dev`
-  - [ ] All required env vars listed
-  - [ ] Troubleshooting: mic permission, CORS, LiveKit warmup, MongoDB
+- [x] `app_instructions.md` in repo root
+  - [x] Prerequisites (Node 20+, Python 3.11+, .env setup)
+  - [x] Backend: install deps → start FastAPI → start agent worker
+  - [x] Frontend: install deps → `npm run dev`
+  - [x] All required env vars listed
+  - [x] Troubleshooting: mic permission, CORS, LiveKit warmup, MongoDB
 
 ### 3.11 Final QA
-- [ ] signup → login → console redirect ✓
-- [ ] Orb: IDLE stationary, SPEAKING jiggle ✓
-- [ ] Connect (green) → active session → Disconnect (red) → Reconnect (green) ✓
-- [ ] User transcript appears (green) ✓
-- [ ] Agent transcript appears (indigo) ✓
-- [ ] Tool timeline shows events ✓
-- [ ] Recents sidebar updates after session ✓
-- [ ] New Session starts fresh ✓
-- [ ] Voice dropdown changes voice ✓
-- [ ] All keyboard shortcuts work ✓
-- [ ] Settings drawer persists ✓
-- [ ] Dev mode: latency chart ✓
-- [ ] Build succeeds, 0 TS errors ✓
+- [x] signup → login → console redirect ✓
+- [x] Orb: IDLE stationary, SPEAKING jiggle ✓
+- [x] Connect (green) → active session → Disconnect (red) → Reconnect (green) ✓
+- [x] User transcript appears (green) ✓
+- [x] Agent transcript appears (indigo) ✓
+- [x] Tool timeline shows events ✓
+- [x] Recents sidebar updates after session ✓
+- [x] New Session starts fresh ✓
+- [x] Voice dropdown changes voice ✓
+- [x] All keyboard shortcuts work ✓
+- [x] Settings drawer persists ✓
+- [x] Dev mode: latency chart ✓
+- [x] Build succeeds, 0 TS errors ✓
 
 ---
 

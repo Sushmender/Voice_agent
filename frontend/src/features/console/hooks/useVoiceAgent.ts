@@ -23,11 +23,13 @@ function generateId() {
 interface UseVoiceAgentOptions {
   roomName?: string;
   onAudioTrack?: (track: RemoteTrack) => void;
+  onMicError?: (type: 'denied' | 'notfound') => void;
 }
 
 export function useVoiceAgent({
   roomName = 'voice-room',
   onAudioTrack,
+  onMicError,
 }: UseVoiceAgentOptions = {}) {
   const user = useAppStore((s) => s.user);
   const {
@@ -90,12 +92,20 @@ export function useVoiceAgent({
       } catch (err: unknown) {
         const domErr = err as DOMException;
         if (domErr.name === 'NotAllowedError' || domErr.name === 'PermissionDeniedError') {
-          toasts.micDenied();
+          if (onMicError) {
+            onMicError('denied');
+          } else {
+            toasts.micDenied();
+          }
           setAgentState('ERROR');
           setError('Microphone access required.');
           return;
         } else if (domErr.name === 'NotFoundError') {
-          toasts.micNotFound();
+          if (onMicError) {
+            onMicError('notfound');
+          } else {
+            toasts.micNotFound();
+          }
           setAgentState('ERROR');
           setError('No microphone detected.');
           return;
@@ -268,6 +278,7 @@ export function useVoiceAgent({
     updateTypingTranscript,
     addToolEvent,
     onAudioTrack,
+    onMicError,
     clearWarmupTimer,
     startDurationTimer,
     stopDurationTimer,

@@ -456,3 +456,15 @@
   .page-exit        { opacity: 1; transform: translateY(0); }
   .page-exit-active { opacity: 0; transform: translateY(-8px); transition: all 250ms var(--ease-accel); }
 }
+
+/* ── Accessibility: Reduced motion (DESIGN_REFERENCE §18) ───────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

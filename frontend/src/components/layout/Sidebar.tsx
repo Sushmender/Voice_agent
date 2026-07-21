@@ -8,6 +8,7 @@ import {
   ChevronRight,
   LogOut,
   Zap,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
@@ -18,10 +19,12 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { to: '/console', icon: Mic2, label: 'Console' },
-  { to: '/history', icon: History, label: 'History' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/console',   icon: Mic2,            label: 'Console'   },
+  { to: '/history',   icon: History,          label: 'History'   },
+  { to: '/settings',  icon: Settings,         label: 'Settings'  },
 ];
+
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { user, logout } = useAppStore();

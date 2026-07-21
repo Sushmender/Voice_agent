@@ -1,5 +1,9 @@
 import { toast } from 'sonner';
 
+// Re-export sonner toast directly for ad-hoc use
+export { toast };
+
+
 const baseStyle = {
   background: '#0d1018',
   border: '1px solid rgba(99,102,241,0.18)',
