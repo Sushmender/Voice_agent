@@ -100,6 +100,22 @@
 @keyframes orb-breathe     { 0%,100%{transform:scale(1)} 50%{transform:scale(1.035)} }
 @keyframes orb-idle-glow   { 0%,100%{box-shadow:0 0 40px rgba(99,102,241,0.2)} 50%{box-shadow:0 0 80px rgba(99,102,241,0.5)} }
 @keyframes orb-speak-ripple{ 0%{transform:scale(1);opacity:.6} 100%{transform:scale(1.6);opacity:0} }
+/* Idle-specific: gentle 3-axis jiggle so the orb always looks alive */
+@keyframes orb-idle-jiggle {
+  0%   { transform: scale(1) rotate(0deg) translateY(0px); }
+  15%  { transform: scale(1.018) rotate(0.6deg) translateY(-1.5px); }
+  30%  { transform: scale(0.985) rotate(-0.4deg) translateY(1px); }
+  50%  { transform: scale(1.022) rotate(0.3deg) translateY(-2px); }
+  70%  { transform: scale(0.990) rotate(-0.6deg) translateY(1.5px); }
+  85%  { transform: scale(1.012) rotate(0.4deg) translateY(-1px); }
+  100% { transform: scale(1) rotate(0deg) translateY(0px); }
+}
+/* Expanding breathing ring used in idle state */
+@keyframes orb-idle-ring {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  60%  { transform: scale(1.5); opacity: 0.2; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
 
 /* Audio bars */
 @keyframes bar-bounce { 0%,100%{transform:scaleY(0.18)} 50%{transform:scaleY(1)} }

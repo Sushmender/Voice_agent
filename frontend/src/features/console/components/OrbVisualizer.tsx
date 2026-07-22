@@ -1,68 +1,79 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { AgentState, SpeakingState } from '../../../types/agent';
 
-// ── Audio bars sub-component ──────────────────────────────────────────────────
-interface AudioBarsProps {
-  mode: 'idle' | 'listening' | 'speaking' | 'warming';
-  bars: number[]; // 0-1 amplitude per bar
-}
-
-function AudioBars({ mode, bars }: AudioBarsProps) {
-  const barCount = 7;
-  const maxH = [28, 40, 48, 36, 44, 32, 38]; // max heights per DESIGN_REFERENCE
-
-  const barStyle = (i: number, amp: number): React.CSSProperties => {
-    const baseH = mode === 'idle' || mode === 'warming' ? 6 : maxH[i] * Math.max(0.18, amp);
-    return {
-      width: '3px',
-      height: `${baseH}px`,
-      borderRadius: '2px',
-      transformOrigin: 'bottom',
-      transition: 'height 0.1s ease',
-      animationDelay: mode === 'listening'
-        ? `${i * 0.08}s`
-        : mode === 'speaking'
-        ? `${i * 0.12}s`
-        : `${i * 0.2}s`,
-    };
-  };
-
-  const barClass = (mode: string) => {
-    switch (mode) {
-      case 'listening': return 'viz-bar-listening';
-      case 'speaking':  return 'viz-bar-speaking';
-      case 'warming':   return 'viz-bar-warming';
-      default:          return 'viz-bar-idle';
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '48px' }}>
-      {Array.from({ length: barCount }, (_, i) => (
-        <div
-          key={i}
-          className={barClass(mode)}
-          style={barStyle(i, bars[i] ?? 0)}
-        />
-      ))}
-    </div>
-  );
-}
+// ── Idle colour cycle palette ─────────────────────────────────────────────────
+// Each step: [core gradient, core glow, ring gradient, rgb components for halo]
+const IDLE_PALETTE = [
+  {
+    gradient: 'radial-gradient(circle at 38% 35%, rgba(20,184,166,0.38) 0%, rgba(6,182,212,0.20) 40%, rgba(6,9,18,0.82) 100%)',
+    glow:     '0 0 55px rgba(20,184,166,0.34), 0 0 100px rgba(6,182,212,0.15)',
+    outerRing:'linear-gradient(135deg, rgba(20,184,166,0.75), rgba(6,182,212,0.22), rgba(20,184,166,0.75))',
+    midRing:  'linear-gradient(135deg, rgba(6,182,212,0.60), rgba(20,184,166,0.15), rgba(6,182,212,0.60))',
+    dot1:     '#5eead4', dot1Glow: '#5eead4',
+    dot2:     '#22d3ee', dot2Glow: '#22d3ee',
+    haloRGB:  '20,184,166',
+    mic:      '#5eead4',
+    inner:    '20,184,166',
+  },
+  {
+    gradient: 'radial-gradient(circle at 38% 35%, rgba(6,182,212,0.40) 0%, rgba(59,130,246,0.22) 40%, rgba(6,9,18,0.82) 100%)',
+    glow:     '0 0 55px rgba(6,182,212,0.36), 0 0 100px rgba(59,130,246,0.15)',
+    outerRing:'linear-gradient(135deg, rgba(6,182,212,0.75), rgba(59,130,246,0.22), rgba(6,182,212,0.75))',
+    midRing:  'linear-gradient(135deg, rgba(59,130,246,0.60), rgba(6,182,212,0.15), rgba(59,130,246,0.60))',
+    dot1:     '#22d3ee', dot1Glow: '#22d3ee',
+    dot2:     '#60a5fa', dot2Glow: '#60a5fa',
+    haloRGB:  '6,182,212',
+    mic:      '#22d3ee',
+    inner:    '6,182,212',
+  },
+  {
+    gradient: 'radial-gradient(circle at 38% 35%, rgba(59,130,246,0.36) 0%, rgba(99,102,241,0.20) 40%, rgba(6,9,18,0.82) 100%)',
+    glow:     '0 0 55px rgba(59,130,246,0.32), 0 0 100px rgba(99,102,241,0.14)',
+    outerRing:'linear-gradient(135deg, rgba(59,130,246,0.75), rgba(99,102,241,0.22), rgba(59,130,246,0.75))',
+    midRing:  'linear-gradient(135deg, rgba(99,102,241,0.60), rgba(59,130,246,0.15), rgba(99,102,241,0.60))',
+    dot1:     '#60a5fa', dot1Glow: '#60a5fa',
+    dot2:     '#818cf8', dot2Glow: '#818cf8',
+    haloRGB:  '59,130,246',
+    mic:      '#60a5fa',
+    inner:    '59,130,246',
+  },
+  {
+    gradient: 'radial-gradient(circle at 38% 35%, rgba(99,102,241,0.38) 0%, rgba(168,85,247,0.20) 40%, rgba(6,9,18,0.82) 100%)',
+    glow:     '0 0 55px rgba(99,102,241,0.34), 0 0 100px rgba(168,85,247,0.14)',
+    outerRing:'linear-gradient(135deg, rgba(99,102,241,0.75), rgba(168,85,247,0.22), rgba(99,102,241,0.75))',
+    midRing:  'linear-gradient(135deg, rgba(168,85,247,0.60), rgba(99,102,241,0.15), rgba(168,85,247,0.60))',
+    dot1:     '#818cf8', dot1Glow: '#818cf8',
+    dot2:     '#c084fc', dot2Glow: '#c084fc',
+    haloRGB:  '99,102,241',
+    mic:      '#818cf8',
+    inner:    '99,102,241',
+  },
+  {
+    gradient: 'radial-gradient(circle at 38% 35%, rgba(168,85,247,0.34) 0%, rgba(20,184,166,0.16) 40%, rgba(6,9,18,0.82) 100%)',
+    glow:     '0 0 55px rgba(168,85,247,0.30), 0 0 100px rgba(20,184,166,0.12)',
+    outerRing:'linear-gradient(135deg, rgba(168,85,247,0.75), rgba(20,184,166,0.22), rgba(168,85,247,0.75))',
+    midRing:  'linear-gradient(135deg, rgba(20,184,166,0.60), rgba(168,85,247,0.15), rgba(20,184,166,0.60))',
+    dot1:     '#c084fc', dot1Glow: '#c084fc',
+    dot2:     '#5eead4', dot2Glow: '#5eead4',
+    haloRGB:  '168,85,247',
+    mic:      '#c084fc',
+    inner:    '168,85,247',
+  },
+];
 
 // ── Main orb ──────────────────────────────────────────────────────────────────
 interface OrbVisualizerProps {
   agentState: AgentState;
   speakingState: SpeakingState;
-  bars?: number[]; // 0-1 per bar from useWaveform
+  bars?: number[];
   amplitude?: number;
 }
 
 export function OrbVisualizer({
   agentState,
   speakingState,
-  bars = Array(7).fill(0),
+  amplitude = 0,
 }: OrbVisualizerProps) {
-  // Derive combined mode for styling
   const isError      = agentState === 'ERROR';
   const isConnecting = agentState === 'CONNECTING';
   const isWarming    = agentState === 'WARMING_UP';
@@ -71,22 +82,35 @@ export function OrbVisualizer({
   const isSpeaking   = isConnected && speakingState === 'SPEAKING';
   const isIdle       = agentState === 'IDLE';
 
-  // Bar mode
-  const barMode: AudioBarsProps['mode'] = isWarming
-    ? 'warming'
-    : isListening
-    ? 'listening'
-    : isSpeaking
-    ? 'speaking'
-    : 'idle';
+  const [idleIdx, setIdleIdx] = useState(0);
+  const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Outer ring spin speed
-  const ringAnimate = isIdle ? 'none' : 'orb-spin 18s linear infinite';
-  const midAnimate  = isIdle ? 'none' : 'orb-spin-ccw 12s linear infinite';
-  const innerAnimate = isIdle ? 'none' : 'orb-pulse 3s ease-in-out infinite';
-  const coreAnimate  = 'orb-breathe 2.5s ease-in-out infinite';
+  useEffect(() => {
+    if (isIdle) {
+      idleTimerRef.current = setInterval(() => {
+        setIdleIdx((i) => (i + 1) % IDLE_PALETTE.length);
+      }, 2400);
+    } else {
+      if (idleTimerRef.current) {
+        clearInterval(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (idleTimerRef.current) {
+        clearInterval(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+  }, [isIdle]);
 
-  // Core gradient based on state
+  const pal = IDLE_PALETTE[idleIdx];
+
+  const ringAnimate   = isIdle ? 'orb-spin 30s linear infinite'          : 'orb-spin 18s linear infinite';
+  const midAnimate    = isIdle ? 'orb-spin-ccw 22s linear infinite'      : 'orb-spin-ccw 12s linear infinite';
+  const innerAnimate  = isIdle ? 'orb-pulse 5s ease-in-out infinite'     : 'orb-pulse 3s ease-in-out infinite';
+  const coreAnimate   = isIdle ? 'orb-idle-jiggle 3.5s ease-in-out infinite' : 'orb-breathe 2.5s ease-in-out infinite';
+
   const coreGradient = isError
     ? 'radial-gradient(circle at 38% 35%, rgba(239,68,68,0.18) 0%, rgba(6,9,18,0.95) 100%)'
     : isWarming
@@ -96,10 +120,9 @@ export function OrbVisualizer({
     : isSpeaking
     ? 'radial-gradient(circle at 38% 35%, rgba(99,102,241,0.42) 0%, rgba(168,85,247,0.22) 40%, rgba(6,9,18,0.80) 100%)'
     : isIdle
-    ? 'radial-gradient(circle, rgba(30,42,58,0.85) 0%, rgba(8,11,18,0.95) 100%)'
+    ? pal.gradient
     : 'radial-gradient(circle at 38% 35%, rgba(147,168,255,0.30) 0%, rgba(99,102,241,0.22) 30%, rgba(59,130,246,0.15) 60%, rgba(6,9,18,0.80) 100%)';
 
-  // Core glow
   const coreGlow = isError
     ? '0 0 40px rgba(239,68,68,0.25)'
     : isWarming
@@ -109,191 +132,135 @@ export function OrbVisualizer({
     : isSpeaking
     ? '0 0 80px rgba(99,102,241,0.55), 0 0 160px rgba(59,130,246,0.22)'
     : isIdle
-    ? 'none'
+    ? pal.glow
     : '0 0 60px rgba(99,102,241,0.38)';
 
-  // Outer ring opacity
-  const ringOpacity = isIdle ? 0.25 : 1;
-  const midOpacity  = isIdle ? 0.20 : 1;
-  const innerOpacity = isIdle ? 0.15 : 1;
+  const outerRingGradient = isIdle ? pal.outerRing : 'linear-gradient(135deg, rgba(59,130,246,0.65), rgba(168,85,247,0.15), rgba(59,130,246,0.65))';
+  const midRingGradient   = isIdle ? pal.midRing   : 'linear-gradient(135deg, rgba(168,85,247,0.55), rgba(99,102,241,0.15), rgba(168,85,247,0.55))';
+  const ringOpacity       = isIdle ? 0.80 : 1;
+  const midOpacity        = isIdle ? 0.70 : 1;
+  const innerOpacity      = isIdle ? 0.55 : 1;
 
-  // Mic icon color
-  const micColor = isError
-    ? 'rgba(239,68,68,0.55)'
-    : isWarming
-    ? 'rgba(245,158,11,0.65)'
-    : isListening
-    ? '#60a5fa'
-    : isSpeaking
-    ? 'rgba(168,180,255,0.65)'
-    : isIdle
-    ? '#4a5568'
-    : 'rgba(160,180,255,0.75)';
+  const micColor = isError ? 'rgba(239,68,68,0.55)' : isWarming ? 'rgba(245,158,11,0.65)'
+    : isListening ? '#60a5fa' : isSpeaking ? 'rgba(168,180,255,0.65)' : isIdle ? pal.mic : 'rgba(160,180,255,0.75)';
 
-  // Error shake
-  const coreExtraStyle: React.CSSProperties = isError
-    ? { animation: `${coreAnimate}, orb-error-shake 0.5s ease-in-out` }
-    : {};
+  const coreExtraStyle: React.CSSProperties = isError ? { animation: `${coreAnimate}, orb-error-shake 0.5s ease-in-out` } : {};
+  const outerRingExtra: React.CSSProperties = isListening ? { animation: `${ringAnimate}, orb-outer-listen 0.4s ease-in-out infinite alternate` } : {};
+  
+  const haloOpacity = isSpeaking ? 0.35 : isConnected ? 0.22 : isIdle ? 0.22 : 0.12;
+  const haloRGB = isIdle ? pal.haloRGB : '99,102,241';
 
-  // Connecting sweep overlay
-  const showSweep = isConnecting;
-
-  // Ripple rings for SPEAKING state
-  const showRipples = isSpeaking;
-
-  // Scale outer ring for LISTENING (subtle pulse)
-  const outerRingExtra: React.CSSProperties = isListening
-    ? { animation: `${ringAnimate}, orb-outer-listen 0.4s ease-in-out infinite alternate` }
-    : {};
-
-  // Ambient halo intensity
-  const haloOpacity = isSpeaking ? 0.35 : isConnected ? 0.22 : 0.12;
+  const userSpeakingScale = isListening ? 1 + amplitude * 0.12 : 1;
+  const userSpeakingHue = isListening ? amplitude * 240 : 0;
+  const userSpeakingRot = isListening ? (amplitude - 0.5) * 15 : 0;
 
   return (
-    <div
-      className="orb-root"
-      style={{
-        position: 'relative',
-        width: '260px',
-        height: '260px',
-        flexShrink: 0,
-      }}
-    >
-      {/* Div 1 — Ambient halo */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: '-40px',
-          borderRadius: '50%',
-          background: `radial-gradient(circle, rgba(99,102,241,${haloOpacity}) 0%, transparent 68%)`,
-          pointerEvents: 'none',
-          transition: 'opacity 0.5s ease',
-        }}
-      />
+    <div className="orb-root" style={{ 
+        position: 'relative', width: '260px', height: '260px', flexShrink: 0,
+        transform: `scale(${userSpeakingScale}) rotate(${userSpeakingRot}deg)`,
+        filter: `hue-rotate(${userSpeakingHue}deg)`,
+        transition: isListening ? 'transform 0.05s linear, filter 0.05s linear' : 'transform 0.4s ease, filter 0.4s ease',
+      }}>
 
-      {/* Div 2 — Outer ring (260px) */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: '50%',
-          backgroundImage:
-            'linear-gradient(#080b12, #080b12), linear-gradient(135deg, rgba(59,130,246,0.65), rgba(168,85,247,0.15), rgba(59,130,246,0.65))',
-          backgroundOrigin: 'border-box',
-          backgroundClip: 'padding-box, border-box',
-          border: '1px solid transparent',
-          animation: ringAnimate,
-          opacity: ringOpacity,
-          transition: 'opacity 0.5s ease',
-          ...outerRingExtra,
-        }}
-      >
-        {/* Tracking dot */}
-        <div style={{
-          position: 'absolute', top: '2px', left: '50%', transform: 'translateX(-50%)',
-          width: '6px', height: '6px', borderRadius: '50%',
-          background: '#3b82f6', boxShadow: '0 0 12px #3b82f6',
-        }} />
-      </div>
+      <div style={{
+        position: 'absolute', inset: '-40px', borderRadius: '50%',
+        background: `radial-gradient(circle, rgba(${haloRGB},${haloOpacity}) 0%, transparent 68%)`,
+        pointerEvents: 'none', transition: 'background 2s ease',
+      }} />
 
-      {/* Connecting sweep overlay */}
-      {showSweep && (
-        <div style={{
-          position: 'absolute', inset: 0, borderRadius: '50%',
-          background: 'conic-gradient(from 0deg, rgba(99,102,241,0.55) 0deg, transparent 120deg)',
-          animation: 'orb-spin 1.2s linear infinite',
-          pointerEvents: 'none',
-        }} />
-      )}
-
-      {/* Div 3 — Mid ring (inset 22px) */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: '22px',
-          borderRadius: '50%',
-          backgroundImage:
-            'linear-gradient(#080b12, #080b12), linear-gradient(135deg, rgba(168,85,247,0.55), rgba(99,102,241,0.15), rgba(168,85,247,0.55))',
-          backgroundOrigin: 'border-box',
-          backgroundClip: 'padding-box, border-box',
-          border: '1px solid transparent',
-          animation: midAnimate,
-          opacity: midOpacity,
-          transition: 'opacity 0.5s ease',
-        }}
-      >
-        <div style={{
-          position: 'absolute', bottom: '2px', left: '50%', transform: 'translateX(-50%)',
-          width: '4px', height: '4px', borderRadius: '50%',
-          background: '#a855f7', boxShadow: '0 0 8px #a855f7',
-        }} />
-      </div>
-
-      {/* Div 4 — Inner pulse ring (inset 44px) */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: '44px',
-          borderRadius: '50%',
-          border: '1px solid rgba(99,102,241,0.35)',
-          boxShadow: '0 0 24px rgba(99,102,241,0.14) inset',
-          animation: innerAnimate,
-          opacity: innerOpacity,
-          transition: 'opacity 0.5s ease',
-        }}
-      />
-
-      {/* Ripple rings — SPEAKING only */}
-      {showRipples && (
+      {isIdle && (
         <>
           <div style={{
-            position: 'absolute', inset: '44px', borderRadius: '50%',
-            border: '1.5px solid rgba(99,102,241,0.5)',
-            animation: 'orb-speak-ripple 1.5s ease-out infinite',
-            pointerEvents: 'none',
+            position: 'absolute', inset: '30px', borderRadius: '50%',
+            border: `1.5px solid rgba(${pal.inner},0.24)`,
+            animation: 'orb-idle-ring 4.2s ease-out infinite',
+            pointerEvents: 'none', transition: 'border-color 2s ease',
           }} />
           <div style={{
-            position: 'absolute', inset: '44px', borderRadius: '50%',
-            border: '1.5px solid rgba(99,102,241,0.5)',
-            animation: 'orb-speak-ripple 1.5s ease-out 0.65s infinite',
-            pointerEvents: 'none',
+            position: 'absolute', inset: '30px', borderRadius: '50%',
+            border: `1.5px solid rgba(${pal.inner},0.13)`,
+            animation: 'orb-idle-ring 4.2s ease-out 2.1s infinite',
+            pointerEvents: 'none', transition: 'border-color 2s ease',
           }} />
         </>
       )}
 
-      {/* Div 5 — Core (inset 58px) */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: '58px',
-          borderRadius: '50%',
-          background: coreGradient,
-          backdropFilter: 'blur(8px)',
-          boxShadow: coreGlow,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          animation: coreAnimate,
-          transition: 'background 0.4s ease, box-shadow 0.4s ease',
-          ...coreExtraStyle,
-        }}
-      >
-        {/* Audio bars */}
-        <AudioBars mode={barMode} bars={bars} />
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: '50%',
+        backgroundImage: `linear-gradient(#080b12, #080b12), ${outerRingGradient}`,
+        backgroundOrigin: 'border-box', backgroundClip: 'padding-box, border-box',
+        border: '1px solid transparent', animation: ringAnimate, opacity: ringOpacity,
+        transition: 'opacity 1s ease, background-image 2s ease', ...outerRingExtra,
+      }}>
+        <div style={{
+          position: 'absolute', top: '2px', left: '50%', transform: 'translateX(-50%)',
+          width: '6px', height: '6px', borderRadius: '50%',
+          background: isIdle ? pal.dot1 : '#3b82f6',
+          boxShadow: `0 0 12px ${isIdle ? pal.dot1Glow : '#3b82f6'}`,
+          transition: 'background 2s ease, box-shadow 2s ease',
+        }} />
+      </div>
 
-        {/* Mic icon */}
-        <svg
-          width="18" height="18" viewBox="0 0 24 24"
-          fill={micColor}
-          style={{ transition: 'fill 0.4s ease', flexShrink: 0 }}
-        >
+      {isConnecting && (
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: 'conic-gradient(from 0deg, rgba(99,102,241,0.55) 0deg, transparent 120deg)',
+          animation: 'orb-spin 1.2s linear infinite', pointerEvents: 'none',
+        }} />
+      )}
+
+      <div style={{
+        position: 'absolute', inset: '22px', borderRadius: '50%',
+        backgroundImage: `linear-gradient(#080b12, #080b12), ${midRingGradient}`,
+        backgroundOrigin: 'border-box', backgroundClip: 'padding-box, border-box',
+        border: '1px solid transparent', animation: midAnimate, opacity: midOpacity,
+        transition: 'opacity 1s ease, background-image 2s ease',
+      }}>
+        <div style={{
+          position: 'absolute', bottom: '2px', left: '50%', transform: 'translateX(-50%)',
+          width: '4px', height: '4px', borderRadius: '50%',
+          background: isIdle ? pal.dot2 : '#a855f7',
+          boxShadow: `0 0 8px ${isIdle ? pal.dot2Glow : '#a855f7'}`,
+          transition: 'background 2s ease, box-shadow 2s ease',
+        }} />
+      </div>
+
+      <div style={{
+        position: 'absolute', inset: '44px', borderRadius: '50%',
+        border: `1px solid rgba(${isIdle ? pal.inner : '99,102,241'},0.38)`,
+        boxShadow: `0 0 24px rgba(${isIdle ? pal.inner : '99,102,241'},0.16) inset`,
+        animation: innerAnimate, opacity: innerOpacity,
+        transition: 'opacity 1s ease, border-color 2s ease, box-shadow 2s ease',
+      }} />
+
+      {isSpeaking && (
+        <>
+          <div style={{
+            position: 'absolute', inset: '44px', borderRadius: '50%',
+            border: '1.5px solid rgba(99,102,241,0.5)',
+            animation: 'orb-speak-ripple 1.5s ease-out infinite', pointerEvents: 'none',
+          }} />
+          <div style={{
+            position: 'absolute', inset: '44px', borderRadius: '50%',
+            border: '1.5px solid rgba(99,102,241,0.5)',
+            animation: 'orb-speak-ripple 1.5s ease-out 0.65s infinite', pointerEvents: 'none',
+          }} />
+        </>
+      )}
+
+      <div style={{
+        position: 'absolute', inset: '58px', borderRadius: '50%',
+        background: coreGradient, backdropFilter: 'blur(8px)', boxShadow: coreGlow,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: '8px', animation: coreAnimate,
+        transition: 'background 1.6s ease, box-shadow 1.6s ease', ...coreExtraStyle,
+      }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill={micColor}
+          style={{ transition: 'fill 1.6s ease', flexShrink: 0 }}>
           <path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zm-1 16.93V21H9v2h6v-2h-2v-2.07A8 8 0 0 0 20 11h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z" />
         </svg>
       </div>
 
-      {/* Error indicator — subtle red dot */}
       {isError && (
         <div style={{
           position: 'absolute', top: '16px', right: '16px',
