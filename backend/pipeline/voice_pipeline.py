@@ -89,40 +89,41 @@ async def _run_agent_turn(
 # ── Greeting Processor ───────────────────────────────────────────────────────
 class GreetingProcessor(FrameProcessor):
     """
-    Plays a one-shot audio greeting ("Hi, I'm ready!") the first time a
-    ClientConnectedFrame arrives — i.e. exactly when the pipeline finishes
-    connecting and is ready to listen.  After firing once it becomes a
-    transparent pass-through for all subsequent frames.
+    Plays a one-shot audio greeting ("I'm ready!") the first time a
+    StartFrame arrives — i.e. exactly when the pipeline starts up and is
+    ready to listen.  After firing once it becomes a transparent pass-through
+    for all subsequent frames.
 
     Placement in pipeline:
-        ... → LangGraphLLMService → GreetingProcessor → CartesiaTTSService → ...
+        ... → STT → LatencyLogger → GreetingProcessor → LangGraphLLMService → ...
 
     The GreetingProcessor injects:
         LLMFullResponseStartFrame  (signals TTS to start streaming)
-        TextFrame("Hi, I'm ready!")  (the greeting text to synthesise)
+        TextFrame("I'm ready!")    (the greeting text to synthesise)
         LLMFullResponseEndFrame    (signals TTS to finish)
-    These are forwarded *before* the StartFrame so TTS speaks immediately.
+    These are pushed right after forwarding the StartFrame so TTS speaks immediately.
     """
 
-    GREETING_TEXT = "Hi, I'm ready!"
+    GREETING_TEXT = "I'm ready!"
 
     def __init__(self):
         super().__init__()
         self._greeted = False
 
     async def process_frame(self, frame: object, direction: FrameDirection):
-        """Forward all frames; inject greeting once on the first ClientConnectedFrame."""
-        from pipecat.frames.frames import ClientConnectedFrame
+        """Forward all frames; inject greeting once on the first StartFrame."""
+        from pipecat.frames.frames import StartFrame
         await super().process_frame(frame, direction)
+        await self.push_frame(frame, direction)
 
-        if not self._greeted and isinstance(frame, ClientConnectedFrame):
+        if not self._greeted and isinstance(frame, StartFrame):
             self._greeted = True
-            logger.info("[Greeting] Pipeline ready — sending audio greeting.")
+            logger.info("[Greeting] Pipeline started — sending audio greeting.")
+            # Small delay to let the transport fully connect before TTS speaks
+            await asyncio.sleep(1.5)
             await self.push_frame(LLMFullResponseStartFrame())
             await self.push_frame(TextFrame(self.GREETING_TEXT))
             await self.push_frame(LLMFullResponseEndFrame())
-
-        await self.push_frame(frame, direction)
 
 
 # ── Interruption Handler Processor ───────────────────────────────────────────
@@ -134,11 +135,11 @@ class InterruptionHandlerProcessor(FrameProcessor):
     BotStartedSpeakingFrame / BotStoppedSpeakingFrame emitted by Cartesia TTS.
 
     When the user starts speaking WHILE the bot is speaking:
-        → calls broadcast_interruption() which pushes InterruptionFrame
-          both upstream and downstream through the entire pipeline.
-        → Cartesia TTS receives InterruptionFrame → stops mid-stream immediately.
-        → LangGraphLLMService receives InterruptionFrame → cancels running task.
-        → Pipeline is clean and ready for the next user utterance.
+        → Pre-buffers audio from the moment VAD fires (so no speech is lost).
+        → Calls broadcast_interruption() → TTS and LLM cancel immediately.
+        → Waits a short reset_grace_secs for the pipeline to clear.
+        → Re-injects all buffered audio frames downstream so STT gets the
+          COMPLETE utterance from the very first syllable, not just the tail.
 
     When the user starts speaking WHILE the bot is silent:
         → passes through normally (new conversation turn).
@@ -155,58 +156,104 @@ class InterruptionHandlerProcessor(FrameProcessor):
     """
 
     # Seconds after bot starts speaking before interruption detection is active.
-    # Prevents the very first audio burst from triggering a false self-interrupt
-    # on speaker setups where echo cancellation takes a moment to engage.
     _ECHO_PROTECTION_SECS: float = 0.2
+
+    # How long to wait after broadcasting InterruptionFrame before replaying
+    # buffered audio. This lets Cartesia TTS + LLM cancel cleanly so the STT
+    # does not receive audio while the pipeline is still mid-reset.
+    _RESET_GRACE_SECS: float = 0.08   # 80 ms — minimal but enough for cancel propagation
+
+    # Max audio frames to buffer during barge-in (safety cap ~5 s at 20ms chunks)
+    _MAX_BUFFER_FRAMES: int = 250
 
     def __init__(self):
         super().__init__()
         self._bot_is_speaking: bool = False
         self._bot_speech_start_ts: float = 0.0
+        # Pre-speech audio buffer: stores AudioRawFrame chunks from VAD onset
+        self._audio_buffer: list = []
+        self._buffering: bool = False
 
     async def process_frame(self, frame: object, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         from pipecat.frames.frames import (
+            AudioRawFrame,
             BotStartedSpeakingFrame,
             BotStoppedSpeakingFrame,
             VADUserStartedSpeakingFrame,
+            VADUserStoppedSpeakingFrame,
         )
 
-        # Track bot speaking state (Cartesia TTS emits these automatically)
+        # ── Track bot speaking state ───────────────────────────────────────────
         if isinstance(frame, BotStartedSpeakingFrame):
             self._bot_is_speaking = True
             self._bot_speech_start_ts = time.perf_counter()
+            # Clear any stale buffer from previous turn
+            self._audio_buffer.clear()
+            self._buffering = False
             logger.debug("[Interruption] Bot started speaking — interruption detection armed")
 
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self._bot_is_speaking = False
+            self._audio_buffer.clear()
+            self._buffering = False
             logger.debug("[Interruption] Bot stopped speaking — interruption detection disarmed")
 
-        # Key logic: user speaks while bot is speaking → barge-in!
+        # ── Start pre-buffering audio on VAD onset ─────────────────────────────
         elif isinstance(frame, VADUserStartedSpeakingFrame):
             if self._bot_is_speaking:
                 elapsed = time.perf_counter() - self._bot_speech_start_ts
                 if elapsed < self._ECHO_PROTECTION_SECS:
-                    # Too soon after bot started — likely speaker echo, ignore.
                     logger.debug(
                         f"[Interruption] VAD fired {elapsed*1000:.0f}ms after bot started "
                         f"— within echo-protection window, ignoring."
                     )
+                    await self.push_frame(frame, direction)
+                    return
                 else:
-                    # Real user interruption — broadcast to the whole pipeline.
+                    # Real barge-in: start buffering audio BEFORE we interrupt
+                    self._buffering = True
+                    self._audio_buffer.clear()
                     logger.info(
-                        f"[Interruption] 🚨 User interrupted bot after "
-                        f"{elapsed*1000:.0f}ms — broadcasting InterruptionFrame"
+                        f"[Interruption] 🚨 User barge-in after {elapsed*1000:.0f}ms "
+                        f"— buffering audio & broadcasting InterruptionFrame"
                     )
                     self._bot_is_speaking = False
                     await self.broadcast_interruption()
-                    # Do NOT forward the VADUserStartedSpeakingFrame here —
-                    # the InterruptionFrame has already cleared the pipeline.
-                    # VAD will re-emit a fresh VADUserStartedSpeakingFrame for
-                    # the actual user speech once the pipeline resets.
+
+                    # Wait for pipeline reset to propagate (TTS cancel, LLM cancel)
+                    await asyncio.sleep(self._RESET_GRACE_SECS)
+
+                    # Re-inject buffered audio so STT gets full utterance
+                    if self._audio_buffer:
+                        logger.info(
+                            f"[Interruption] Replaying {len(self._audio_buffer)} buffered "
+                            f"audio frames to STT for complete transcript."
+                        )
+                        # First push the VADUserStartedSpeakingFrame so STT knows speech resumed
+                        await self.push_frame(frame, direction)
+                        for buffered_frame in self._audio_buffer:
+                            await self.push_frame(buffered_frame, direction)
+                        self._audio_buffer.clear()
+                    else:
+                        # No buffered audio yet — just forward the VAD frame normally
+                        await self.push_frame(frame, direction)
+
+                    self._buffering = False
                     return
-            # else: bot was silent — normal new turn, fall through to push_frame
+            # Bot was silent — normal new turn, fall through
+
+        elif isinstance(frame, VADUserStoppedSpeakingFrame):
+            # User finished speaking — stop buffering regardless
+            self._buffering = False
+
+        # ── Buffer raw audio frames during barge-in window ─────────────────────
+        elif isinstance(frame, AudioRawFrame) and self._buffering:
+            if len(self._audio_buffer) < self._MAX_BUFFER_FRAMES:
+                self._audio_buffer.append(frame)
+            # Do NOT push audio downstream yet — it will be replayed after reset
+            return
 
         await self.push_frame(frame, direction)
 
@@ -354,13 +401,23 @@ class LangGraphLLMService(LLMService):
             return
 
         # ── Graceful Interruption Continuation ────────────────────────
+        # Keep the clean user text separate from the LLM-decorated text.
+        # The DataChannel transcript and logs show the real user question;
+        # only the LLM receives the system note prepended.
+        clean_user_text = user_text  # preserve original for logging + DataChannel
+        llm_text = user_text        # will be decorated for the LLM if interrupted
+
         if self._was_interrupted:
-            logger.info("[LangGraphLLM] Turn follows an interruption — prepending system note.")
-            user_text = (
+            logger.info(
+                f"[LangGraphLLM] Turn follows an interruption — "
+                f"user said: '{clean_user_text}'"
+            )
+            llm_text = (
                 "[System Note: The user interrupted your previous response. "
-                "Acknowledge the interruption naturally with a short continuation word "
-                "(e.g., 'Gotcha', 'Sure', 'My bad', 'Alright'), and then address their new input.]\n\n"
-                f"User: {user_text}"
+                "Acknowledge the interruption naturally with a short filler word "
+                "(e.g., 'Gotcha', 'Sure', 'My bad', 'Alright'), and then address "
+                "their new input.]\n\n"
+                f"User: {clean_user_text}"
             )
             self._was_interrupted = False
 
@@ -368,24 +425,25 @@ class LangGraphLLMService(LLMService):
 
         logger.info(
             f"[LangGraphLLM] Turn #{self._call_count} | "
-            f"Session '{self._session_id}' | User: '{user_text[:60]}'"
+            f"Session '{self._session_id}' | User: '{clean_user_text[:80]}'"
         )
 
-        # ── Emit user transcript over DataChannel ─────────────────────
+        # ── Emit user transcript over DataChannel (clean text only) ──
         await self._emit_dc({
             "type": "transcript",
             "role": "user",
-            "text": user_text,
+            "text": clean_user_text,
             "timestamp": time.time(),
             "turn": self._call_count,
         })
 
         # ── Run LangGraph agent turn (with tool routing) ──────────────
+        # Pass llm_text (decorated with system note if interrupted) to the LLM
         result: dict = {}
         try:
             result = await _run_agent_turn(
                 session_id=self._session_id,
-                user_text=user_text,
+                user_text=llm_text,
                 user_name=self._user_name,
                 user_id=self._user_id,
             )
@@ -565,7 +623,11 @@ async def create_voice_pipeline(
     if vad_analyzer is None:
         try:
             from pipecat.audio.vad.vad_analyzer import VADParams
-            vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=0.8))
+            vad_analyzer = SileroVADAnalyzer(params=VADParams(
+                stop_secs=0.8,
+                start_secs=0.05,  # Catch speech in just 50ms to ensure full barge-in query is captured
+                min_volume=0.3    # Lower volume threshold to catch quieter beginnings of words
+            ))
         except (ImportError, TypeError):
             # Older pipecat versions may not accept VADParams — fall back
             vad_analyzer = SileroVADAnalyzer()
@@ -645,8 +707,8 @@ async def create_voice_pipeline(
             interruption_handler,   # 🚨 barge-in: user speech mid-bot-speech → interrupt
             stt,                    # speech → text  (Groq Whisper)
             latency_logger,         # 📊 per-stage timing (passthrough)
+            greeting,               # 🔔 one-shot "I'm ready!" on pipeline start
             llm,                    # text → response text (LangGraph + Cerebras)
-            greeting,               # 🔔 one-shot "Hi, I'm ready!" on connect
             tts,                    # response text → audio (Cartesia Sonic)
             tracker,                # 👁️ track BotStartedSpeakingFrame right before output
             transport.output(),     # send audio frames back to LiveKit
