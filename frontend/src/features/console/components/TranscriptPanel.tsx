@@ -22,6 +22,43 @@ function formatTime(isoString: string) {
   }
 }
 
+// ── URL-aware text renderer ────────────────────────────────────────────────────
+// Splits text on URLs and wraps each URL in a styled <a> tag.
+const URL_REGEX = /(https?:\/\/[^\s,\)\]>"']+)/g;
+
+function renderTextWithLinks(text: string, linkColor: string): React.ReactNode[] {
+  const parts = text.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (URL_REGEX.test(part)) {
+      // Reset lastIndex after .test() consumed it
+      URL_REGEX.lastIndex = 0;
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: linkColor,
+            textDecoration: 'underline',
+            textDecorationColor: `${linkColor}80`,
+            textUnderlineOffset: '2px',
+            wordBreak: 'break-all',
+            transition: 'opacity 150ms',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.75')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          {part}
+        </a>
+      );
+    }
+    // Reset just in case
+    URL_REGEX.lastIndex = 0;
+    return part;
+  });
+}
+
 // ── Individual bubble ─────────────────────────────────────────────────────────
 interface BubbleProps {
   role: 'user' | 'agent';
@@ -85,7 +122,9 @@ function TranscriptBubble({ role, text, timestamp, isTyping }: BubbleProps) {
           ))}
         </div>
       ) : (
-        <p style={{ margin: 0 }}>{text}</p>
+        <p style={{ margin: 0 }}>
+          {renderTextWithLinks(text, isUser ? '#86efac' : '#a5b4fc')}
+        </p>
       )}
     </motion.div>
   );

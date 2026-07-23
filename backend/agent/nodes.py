@@ -150,10 +150,13 @@ def load_memory(state: AgentState) -> dict[str, Any]:
     """
     session_id = state.get("session_id", "default")
     user_input = state.get("user_input", "")
+    # Use the clean display text for the in-memory HumanMessage so short-term
+    # memory never contains the [System Note:...] barge-in decoration.
+    display_input = state.get("display_user_input", "") or user_input
 
     history = memory.get_history(session_id)
-    if user_input:
-        history.append(HumanMessage(content=user_input))
+    if display_input:
+        history.append(HumanMessage(content=display_input))
 
     logger.debug(
         f"[load_memory] Session '{session_id}': loaded {len(history)} messages"
@@ -447,10 +450,13 @@ async def save_memory(state: AgentState) -> dict[str, Any]:
     if last_human and last_ai and user_id:
         from datetime import datetime
         now = datetime.utcnow()
+        # Always use display_user_input (clean spoken text) for User_query so
+        # the [System Note:...] barge-in decoration never leaks into history.
+        display_query = state.get("display_user_input", "") or last_human
         conv_log = {
             "Date": now.strftime("%Y-%m-%d"),
             "Time": now.strftime("%H:%M:%S"),
-            "User_query": last_human,
+            "User_query": display_query,
             "LLM_response": last_ai,
             "Tools_Used": state.get("tool_name") or None,
             "session_id": session_id,  # enables grouping conversations by session

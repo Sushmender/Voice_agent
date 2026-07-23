@@ -133,6 +133,7 @@ async def run_agent_turn(
     user_text: str,
     user_name: str = "User",
     user_id: str = "",
+    clean_user_text: str = "",
 ) -> dict:
     """
     Convenience wrapper: run one turn of the agent graph.
@@ -155,10 +156,15 @@ async def run_agent_turn(
     """
     graph = get_agent_graph()
 
+    # display_user_input is the clean transcript without any [System Note:...] decoration.
+    # Falls back to user_text if not provided (normal non-interrupted turns are identical).
+    _display_text = clean_user_text if clean_user_text else user_text
+
     initial_state: AgentState = {
         "messages": [],
         "session_id": session_id,
         "user_input": user_text,
+        "display_user_input": _display_text,
         "user_name": user_name,
         "user_id": user_id,
         "tool_name": "",

@@ -102,10 +102,10 @@ async def get_conversations(
     if session_id:
         conversations = [c for c in conversations if c.get("session_id") == session_id]
 
-    # Sort newest-first (Date DESC, then Time DESC)
+    # Sort oldest-first (Date ASC, then Time ASC) — chronological order for display
     conversations.sort(
         key=lambda c: (c.get("Date", ""), c.get("Time", "")),
-        reverse=True,
+        reverse=False,
     )
 
     return {"conversations": conversations[:limit], "total": len(conversations)}

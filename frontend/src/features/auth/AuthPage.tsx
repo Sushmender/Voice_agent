@@ -296,7 +296,7 @@ export function AuthPage() {
             className="shimmer-heading font-bold mb-2"
             style={{ fontSize: '2.4rem', letterSpacing: '-0.04em' }}
           >
-            Voice AI Agent
+            VoiceOps AI
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 4 }}>
             Speak naturally. Get instant answers.

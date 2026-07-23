@@ -22,7 +22,7 @@ export function TopBar({ onShortcutsOpen }: TopBarProps) {
       {/* Left: logo mark */}
       <div className="flex items-center gap-2">
         <Zap className="w-4 h-4 text-accent-indigo" />
-        <span className="text-sm font-semibold text-gradient">Voice AI Agent</span>
+        <span className="text-sm font-semibold text-gradient">VoiceOps AI</span>
       </div>
 
       {/* Right: shortcuts + avatar */}

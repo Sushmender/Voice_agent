@@ -5,6 +5,40 @@ import { useQuery } from '@tanstack/react-query';
 import { getSessions, getConversations } from '../auth/api/authApi';
 import type { Session, ConversationTurn } from '../../types/auth';
 
+// ── URL-aware text renderer ────────────────────────────────────────────────────
+const URL_REGEX = /(https?:\/\/[^\s,\)\]>"']+)/g;
+
+function renderTextWithLinks(text: string, linkColor: string): React.ReactNode[] {
+  const parts = text.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (URL_REGEX.test(part)) {
+      URL_REGEX.lastIndex = 0;
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: linkColor,
+            textDecoration: 'underline',
+            textDecorationColor: `${linkColor}80`,
+            textUnderlineOffset: '2px',
+            wordBreak: 'break-all',
+            transition: 'opacity 150ms',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.75')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          {part}
+        </a>
+      );
+    }
+    URL_REGEX.lastIndex = 0;
+    return part;
+  });
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function relativeDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -130,7 +164,7 @@ function HistoryBubble({ turn }: { turn: ConversationTurn }) {
           color: '#86efac',
           lineHeight: 1.55,
         }}>
-          {turn.User_query}
+          {renderTextWithLinks(turn.User_query, '#86efac')}
         </p>
       </div>
       {/* Agent */}
@@ -172,7 +206,7 @@ function HistoryBubble({ turn }: { turn: ConversationTurn }) {
           color: '#a5b4fc',
           lineHeight: 1.55,
         }}>
-          {turn.LLM_response}
+          {renderTextWithLinks(turn.LLM_response, '#a5b4fc')}
         </p>
       </div>
     </div>

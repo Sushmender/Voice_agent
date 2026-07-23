@@ -25,7 +25,8 @@ class AgentState(TypedDict):
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     session_id: str
-    user_input: str
+    user_input: str           # LLM-facing text (may include [System Note:...] prefix for barge-in)
+    display_user_input: str   # Clean user text for display / DB storage (never decorated)
     user_name: str
     user_id: str
     tool_name: str          # "" means no tool call

@@ -325,6 +325,30 @@
   from { transform: scale(1); }
   to   { transform: scale(1.03); }
 }
+
+/* ── New orb v2 state keyframes ─────────────────────────────────────────────── */
+/* Squash-and-stretch jiggle — plays during LISTENING / SPEAKING */
+@keyframes orb-jiggle {
+  0%,100% { border-radius: 50%;         transform: scale(1,    1)    rotate(0deg); }
+  12%     { border-radius: 48% 52% 50% 50%; transform: scale(1.05, 0.96) rotate(1.4deg); }
+  25%     { border-radius: 52% 48% 50% 50%; transform: scale(0.96, 1.05) rotate(-1.2deg); }
+  40%     { border-radius: 50% 50% 48% 52%; transform: scale(1.06, 0.95) rotate(1deg); }
+  55%     { border-radius: 50% 50% 52% 48%; transform: scale(0.97, 1.04) rotate(-1.4deg); }
+  70%     { border-radius: 51% 49% 50% 50%; transform: scale(1.04, 0.97) rotate(0.8deg); }
+  85%     { border-radius: 49% 51% 50% 50%; transform: scale(0.98, 1.02) rotate(-0.6deg); }
+}
+
+/* Continuous clockwise spin — plays during QUIET / CONNECTING / WARMING_UP */
+@keyframes orb-rotate-thinking {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Red glow pulse — plays during ERROR */
+@keyframes orb-error-glow {
+  0%,100% { box-shadow: 0 0 40px rgba(239,68,68,0.3),  0 0 80px  rgba(239,68,68,0.10); }
+  50%     { box-shadow: 0 0 80px rgba(239,68,68,0.75), 0 0 160px rgba(239,68,68,0.35); }
+}
 @keyframes ripple-out {
   from { transform: scale(1);    opacity: 0.6; }
   to   { transform: scale(1.75); opacity: 0; }

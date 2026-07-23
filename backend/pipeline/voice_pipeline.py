@@ -71,6 +71,7 @@ async def _run_agent_turn(
     user_text: str,
     user_name: str = "User",
     user_id: str = "",
+    clean_user_text: str = "",
 ) -> dict:
     """Thin wrapper around backend.agent.graph.run_agent_turn (imported lazily).
     
@@ -83,6 +84,7 @@ async def _run_agent_turn(
         user_text=user_text,
         user_name=user_name,
         user_id=user_id,
+        clean_user_text=clean_user_text,
     )
 
 
@@ -446,6 +448,7 @@ class LangGraphLLMService(LLMService):
                 user_text=llm_text,
                 user_name=self._user_name,
                 user_id=self._user_id,
+                clean_user_text=clean_user_text,
             )
         except asyncio.CancelledError:
             # User interrupted mid-turn — clean exit, no memory save (per design).

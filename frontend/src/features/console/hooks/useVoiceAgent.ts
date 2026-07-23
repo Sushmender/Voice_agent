@@ -53,6 +53,7 @@ export function useVoiceAgent({
   const warmupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectToastIdRef = useRef<string | number | null>(null);
+  const isReconnectingRef = useRef<boolean>(false);  // true while LiveKit is mid-reconnect
 
   // ── Cleanup helpers ──────────────────────────────────────────────────────────
   const clearWarmupTimer = useCallback(() => {
@@ -225,6 +226,10 @@ export function useVoiceAgent({
         clearWarmupTimer();
         stopDurationTimer();
 
+        // If LiveKit fired Disconnected during a reconnection attempt, do nothing —
+        // the Reconnecting/Reconnected handlers own that lifecycle.
+        if (isReconnectingRef.current) return;
+
         const prevState = useSessionStore.getState().agentState;
         if (prevState === 'CONNECTED' || prevState === 'WARMING_UP') {
           if (room.state === ConnectionState.Disconnected) {
@@ -240,12 +245,18 @@ export function useVoiceAgent({
       });
 
       room.on(RoomEvent.Reconnecting, () => {
+        isReconnectingRef.current = true;  // block Disconnected handler from treating this as an error
+        // dismiss any existing toast first to avoid stacking
+        if (reconnectToastIdRef.current) {
+          toasts.dismiss(reconnectToastIdRef.current);
+        }
         const id = toasts.reconnecting();
-        if (id) reconnectToastIdRef.current = id;
+        if (id !== undefined) reconnectToastIdRef.current = id;
         setAgentState('CONNECTING');
       });
 
       room.on(RoomEvent.Reconnected, () => {
+        isReconnectingRef.current = false;  // reconnect succeeded — clear flag
         if (reconnectToastIdRef.current) {
           toasts.dismiss(reconnectToastIdRef.current);
           reconnectToastIdRef.current = null;
