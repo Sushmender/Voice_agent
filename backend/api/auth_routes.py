@@ -139,21 +139,47 @@ async def get_sessions(current_user: UserInDB = Depends(get_current_user)):
     for conv in conversations:
         sid = conv.get("session_id") or "legacy"
         if sid not in sessions:
-            # Use the first stored turn's user query as the session name
-            raw_name = conv.get("User_query", "Untitled Session")
             sessions[sid] = {
                 "session_id": sid,
-                "session_name": raw_name[:60] + ("…" if len(raw_name) > 60 else ""),
+                "conversations": [],
                 "date": conv.get("Date", ""),
                 "turn_count": 0,
             }
+        sessions[sid]["conversations"].append(conv)
         sessions[sid]["turn_count"] += 1
         # Keep the most recent date for the session
         turn_date = conv.get("Date", "")
         if turn_date > sessions[sid]["date"]:
             sessions[sid]["date"] = turn_date
 
+    result_sessions = []
+    for s_dict in sessions.values():
+        convs = s_dict.pop("conversations")
+        # Sort chronologically
+        convs.sort(key=lambda c: (c.get("Date", ""), c.get("Time", "")))
+        
+        # Check if any conversation turn has a pre-generated session_name
+        pre_generated = next((c.get("session_name") for c in convs if c.get("session_name")), None)
+
+        if pre_generated:
+            s_dict["session_name"] = pre_generated
+        else:
+            # Fallback logic if LLM hasn't generated the title yet
+            if len(convs) >= 3:
+                raw_name = convs[2].get("User_query")
+            elif len(convs) == 2:
+                raw_name = convs[1].get("User_query")
+            elif len(convs) == 1:
+                raw_name = convs[0].get("User_query")
+            else:
+                raw_name = "Untitled Session"
+                
+            raw_name = str(raw_name) if raw_name else "Untitled Session"
+            s_dict["session_name"] = raw_name[:60] + ("…" if len(raw_name) > 60 else "")
+            
+        result_sessions.append(s_dict)
+
     # Sort newest session first
-    result = sorted(sessions.values(), key=lambda s: s["date"], reverse=True)
+    result = sorted(result_sessions, key=lambda s: s["date"], reverse=True)
     return {"sessions": result, "total": len(result)}
 

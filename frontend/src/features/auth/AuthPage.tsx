@@ -76,14 +76,14 @@ export function AuthPage() {
 
   const handleLoginSuccess = () => {
     toast.success('Welcome back! 👋');
-    navigate('/console');
+    navigate('/dashboard');
   };
 
   const handleSignupSuccess = async (email: string, password: string) => {
     try {
       await loginMutation.mutateAsync({ email, password });
       toast.success('Account created! Welcome aboard 🎉');
-      navigate('/console');
+      navigate('/dashboard');
     } catch {
       toast.error('Account created! Please sign in.');
       setMode('login');

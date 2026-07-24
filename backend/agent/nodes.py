@@ -26,6 +26,7 @@ from backend.agent.state import AgentState
 from backend.config import get_settings
 from backend.db.mongodb import get_database
 import backend.memory.short_term as memory
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +421,40 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
     }
 
 
+async def _generate_session_title(user_id: str, session_id: str, query: str):
+    """Background task to generate a concise 3-5 word title for the session."""
+    try:
+        from backend.config import get_settings
+        import openai
+        settings = get_settings()
+        client = openai.AsyncOpenAI(
+            api_key=settings.cerebras_api_key,
+            base_url=settings.cerebras_base_url,
+        )
+        # Minimal prompt to save tokens (approx 25 tokens input, max 10 output)
+        prompt = f"Summarize this into a 2-4 word title, no punctuation:\n{query}"
+        
+        completion = await client.chat.completions.create(
+            model=settings.cerebras_model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=256,
+            temperature=0.3,
+        )
+        title_content = completion.choices[0].message.content
+        title = title_content.strip().strip('"') if title_content else "Untitled Session"
+        
+        db = get_database()
+        if db is not None:
+            from bson.objectid import ObjectId
+            # Update the conversation entry inside the user's document for this session
+            await db.voice_agent_db.users.update_one(
+                {"_id": ObjectId(user_id), "conversations.session_id": session_id},
+                {"$set": {"conversations.$.session_name": title}}
+            )
+            logger.info(f"[_generate_session_title] Generated title for {session_id}: '{title}'")
+    except Exception as e:
+        logger.error(f"[_generate_session_title] Failed to generate title: {e}")
+
 async def save_memory(state: AgentState) -> dict[str, Any]:
     """
     Node: save_memory
@@ -477,4 +512,9 @@ async def save_memory(state: AgentState) -> dict[str, Any]:
         f"[save_memory] Session '{session_id}': saved turn "
         f"(total messages in memory: {turn_count})"
     )
+    
+    # Generate session title in the background on the 1st turn (2 messages) and 2nd turn (4 messages)
+    if turn_count in [2, 4] and last_human and user_id:
+        asyncio.create_task(_generate_session_title(user_id, session_id, state.get("display_user_input", "") or last_human))
+
     return {}
