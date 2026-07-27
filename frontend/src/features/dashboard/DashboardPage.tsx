@@ -295,7 +295,10 @@ export function DashboardPage() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.38, delay: 0.25, ease: [0, 0, 0.2, 1] }}
-        onClick={() => navigate('/console')}
+        onClick={() => {
+          localStorage.removeItem('voice_agent_room_name');
+          navigate('/console');
+        }}
         onMouseEnter={() => setCtaHovered(true)}
         onMouseLeave={() => setCtaHovered(false)}
         style={{

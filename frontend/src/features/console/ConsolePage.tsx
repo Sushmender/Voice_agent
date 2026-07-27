@@ -146,6 +146,19 @@ export function ConsolePage() {
   const [micError, setMicError] = useState<'denied' | 'notfound' | null>(null);
   const [rightTab, setRightTab] = useState<RightTab>('transcript');
 
+  // ── Session-scoped unique room name ──────────────────────────────────────────
+  // Persisted in localStorage so a browser refresh restores the SAME session
+  // (and the agent can reload context from MongoDB history).
+  // Clicking "New Session" generates a fresh key and clears the stored one.
+  const LS_KEY = 'voice_agent_room_name';
+  const [roomName, setRoomName] = useState<string>(() => {
+    const stored = localStorage.getItem(LS_KEY);
+    if (stored) return stored;
+    const fresh = `voice-room-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    localStorage.setItem(LS_KEY, fresh);
+    return fresh;
+  });
+
   const { selectedVoiceId, devMode, setVoiceId } = useSettingsStore();
   const {
     agentState, speakingState, sessionDuration, error,
@@ -153,7 +166,7 @@ export function ConsolePage() {
   } = useSessionStore();
 
   const { connect, disconnect, toggleMute, toggleVolume } = useVoiceAgent({
-    roomName: `voice-room-${selectedVoiceId}`,
+    roomName,
     onAudioTrack: (track) => setAudioTrack(track),
     onMicError: (type: 'denied' | 'notfound') => setMicError(type),
   });
@@ -185,8 +198,13 @@ export function ConsolePage() {
   });
 
   const handleNewSession = () => {
+    // Generate a brand-new unique room name and persist it
+    const fresh = `voice-room-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    localStorage.setItem(LS_KEY, fresh);
+    setRoomName(fresh);
     setActiveSessionId(undefined);
     setSessionKey((k) => k + 1);
+    resetSession();
   };
 
   // Right panel tabs — show latency only in devMode

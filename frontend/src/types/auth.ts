@@ -24,6 +24,10 @@ export interface SignupPayload {
 export interface ConversationTurn {
   Date: string;
   Time: string;
+  /** ISO 8601 UTC timestamp (e.g. "2026-07-25T12:46:43+00:00"). Present on records
+   *  saved after the timestamp migration. Use this for local-time display;
+   *  fall back to the raw Time string for legacy records. */
+  timestamp?: string;
   User_query: string;
   LLM_response: string;
   Tools_Used: string | null;
@@ -34,6 +38,8 @@ export interface Session {
   session_id: string;
   session_name: string;
   date: string;
+  /** ISO 8601 UTC timestamp of the most recent turn in this session. */
+  timestamp?: string;
   turn_count: number;
 }
 

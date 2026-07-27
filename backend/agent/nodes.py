@@ -483,12 +483,15 @@ async def save_memory(state: AgentState) -> dict[str, Any]:
         memory.add_assistant_message(session_id, last_ai)
 
     if last_human and last_ai and user_id:
-        from datetime import datetime
-        now = datetime.utcnow()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
         # Always use display_user_input (clean spoken text) for User_query so
         # the [System Note:...] barge-in decoration never leaks into history.
         display_query = state.get("display_user_input", "") or last_human
         conv_log = {
+            # ISO 8601 UTC timestamp — frontend converts to local time
+            "timestamp": now.isoformat(),
+            # Legacy fields kept for backward compat with existing records
             "Date": now.strftime("%Y-%m-%d"),
             "Time": now.strftime("%H:%M:%S"),
             "User_query": display_query,

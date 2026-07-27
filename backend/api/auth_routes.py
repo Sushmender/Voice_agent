@@ -102,9 +102,10 @@ async def get_conversations(
     if session_id:
         conversations = [c for c in conversations if c.get("session_id") == session_id]
 
-    # Sort oldest-first (Date ASC, then Time ASC) — chronological order for display
+    # Sort by timestamp when available (ISO 8601 sorts lexicographically correctly),
+    # fallback to Date + Time string concat for legacy records
     conversations.sort(
-        key=lambda c: (c.get("Date", ""), c.get("Time", "")),
+        key=lambda c: c.get("timestamp") or f'{c.get("Date", "")}T{c.get("Time", "")}',
         reverse=False,
     )
 
@@ -143,14 +144,19 @@ async def get_sessions(current_user: UserInDB = Depends(get_current_user)):
                 "session_id": sid,
                 "conversations": [],
                 "date": conv.get("Date", ""),
+                "timestamp": conv.get("timestamp") or "",
                 "turn_count": 0,
             }
         sessions[sid]["conversations"].append(conv)
         sessions[sid]["turn_count"] += 1
-        # Keep the most recent date for the session
+        # Keep the most recent date/timestamp for the session
         turn_date = conv.get("Date", "")
         if turn_date > sessions[sid]["date"]:
             sessions[sid]["date"] = turn_date
+        # Update ISO timestamp if this turn has one and it's more recent
+        turn_ts = conv.get("timestamp", "")
+        if turn_ts and turn_ts > sessions[sid]["timestamp"]:
+            sessions[sid]["timestamp"] = turn_ts
 
     result_sessions = []
     for s_dict in sessions.values():
@@ -179,7 +185,11 @@ async def get_sessions(current_user: UserInDB = Depends(get_current_user)):
             
         result_sessions.append(s_dict)
 
-    # Sort newest session first
-    result = sorted(result_sessions, key=lambda s: s["date"], reverse=True)
+    # Sort newest session first — prefer ISO timestamp, fallback to date string
+    result = sorted(
+        result_sessions,
+        key=lambda s: s.get("timestamp") or s["date"],
+        reverse=True,
+    )
     return {"sessions": result, "total": len(result)}
 

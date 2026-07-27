@@ -40,14 +40,36 @@ function renderTextWithLinks(text: string, linkColor: string): React.ReactNode[]
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-function relativeDate(dateStr: string): string {
-  const d = new Date(dateStr);
+/**
+ * Display a relative date label for a session.
+ * Prefers ISO timestamp for accurate local-time math; falls back to date string.
+ */
+function relativeDate(session: Session): string {
+  // Prefer precise ISO timestamp; fallback to date-only string (midnight UTC)
+  const raw = session.timestamp || session.date;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return session.date; // guard against malformed values
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
   if (diffDays === 0) return `Today ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays}d ago`;
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+/**
+ * Format a conversation turn's time in the user's local timezone.
+ * Uses the ISO timestamp when present; falls back to the raw UTC "HH:MM:SS" string.
+ */
+function formatTurnTime(turn: ConversationTurn): string {
+  if (turn.timestamp) {
+    const d = new Date(turn.timestamp);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+  }
+  // Legacy fallback — raw UTC string displayed as-is
+  return turn.Time;
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -120,7 +142,7 @@ function SessionCard({
           fontSize: '0.7rem',
           color: 'var(--text-ghost)',
         }}>
-          {relativeDate(session.date)}
+          {relativeDate(session)}
         </span>
       </div>
     </div>
@@ -154,7 +176,7 @@ function HistoryBubble({ turn }: { turn: ConversationTurn }) {
             fontSize: '0.62rem',
             color: 'var(--text-ghost)',
           }}>
-            {turn.Time}
+            {formatTurnTime(turn)}
           </span>
         </div>
         <p style={{
@@ -509,7 +531,7 @@ export function HistoryPage() {
                     fontSize: '0.72rem',
                     color: 'var(--text-muted)',
                   }}>
-                    {selectedSession?.turn_count} turns · {selectedSession ? relativeDate(selectedSession.date) : ''}
+                    {selectedSession?.turn_count} turns · {selectedSession ? relativeDate(selectedSession) : ''}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
