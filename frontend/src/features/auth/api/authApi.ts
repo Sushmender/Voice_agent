@@ -51,3 +51,11 @@ export async function getSessions(): Promise<SessionsResponse> {
   const { data } = await api.get<SessionsResponse>('/auth/sessions');
   return data;
 }
+
+// ── Delete Session ─────────────────────────────────────────────────────────────
+export async function deleteSession(
+  sessionId: string
+): Promise<{ deleted: boolean; session_id: string; turns_deleted: number }> {
+  const { data } = await api.delete(`/auth/sessions/${sessionId}`);
+  return data;
+}

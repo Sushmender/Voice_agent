@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Mic, Download, Copy, Check } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { getSessions, getConversations } from '../auth/api/authApi';
+import { Search, Mic, Download, Copy, Check, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getSessions, getConversations, deleteSession } from '../auth/api/authApi';
 import type { Session, ConversationTurn } from '../../types/auth';
 
 // ── URL-aware text renderer ────────────────────────────────────────────────────
@@ -81,54 +82,305 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
+// ── Delete confirm modal (full-screen overlay) ─────────────────────────────────
+function DeleteConfirmModal({
+  session,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  session: Session;
+  isDeleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const sessionName = session.session_name || `Voice Session #${session.session_id.slice(-4)}`;
+
+  // Close on Escape key
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !isDeleting) onCancel();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDeleting, onCancel]);
+
+  return ReactDOM.createPortal(
+    <AnimatePresence>
+      <motion.div
+        key="delete-overlay"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={isDeleting ? undefined : onCancel}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(4, 6, 14, 0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+        }}
+      >
+        <motion.div
+          key="delete-dialog"
+          initial={{ opacity: 0, scale: 0.92, y: 16 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: 8 }}
+          transition={{ duration: 0.22, ease: [0, 0, 0.2, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: '100%',
+            maxWidth: '420px',
+            margin: '0 16px',
+            background: 'linear-gradient(145deg, rgba(14,17,32,0.98) 0%, rgba(10,12,24,0.98) 100%)',
+            border: '1px solid rgba(239,68,68,0.25)',
+            borderRadius: '16px',
+            padding: '32px 28px 28px',
+            boxShadow: '0 0 0 1px rgba(239,68,68,0.08), 0 32px 64px rgba(0,0,0,0.6), 0 0 80px rgba(239,68,68,0.06)',
+          }}
+        >
+          {/* Icon */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '52px',
+            height: '52px',
+            borderRadius: '14px',
+            background: 'rgba(239,68,68,0.1)',
+            border: '1px solid rgba(239,68,68,0.2)',
+            marginBottom: '20px',
+          }}>
+            <AlertTriangle size={24} style={{ color: 'rgb(239,68,68)' }} />
+          </div>
+
+          {/* Heading */}
+          <h2 style={{
+            margin: '0 0 8px',
+            fontFamily: "'Inter', sans-serif",
+            fontSize: '1.15rem',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            letterSpacing: '-0.02em',
+          }}>
+            Delete this session?
+          </h2>
+
+          {/* Session name pill */}
+          <p style={{
+            margin: '0 0 12px',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '0.75rem',
+            color: 'var(--accent-indigo)',
+            background: 'rgba(99,102,241,0.08)',
+            border: '1px solid rgba(99,102,241,0.15)',
+            borderRadius: '6px',
+            padding: '4px 10px',
+            display: 'inline-block',
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {sessionName}
+          </p>
+
+          {/* Sarcastic message */}
+          <p style={{
+            margin: '0 0 28px',
+            fontFamily: "'Inter', sans-serif",
+            fontSize: '0.88rem',
+            color: 'var(--text-muted)',
+            lineHeight: 1.6,
+          }}>
+            Really? Gone forever. Every single turn, poof.
+            <br />
+            <span style={{ color: 'rgba(239,68,68,0.8)', fontStyle: 'italic' }}>
+              No undo. Bold move, chief.
+            </span>
+          </p>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={onCancel}
+              disabled={isDeleting}
+              style={{
+                flex: 1,
+                padding: '11px 0',
+                background: 'transparent',
+                border: '1px solid var(--border-default)',
+                borderRadius: '10px',
+                color: 'var(--text-secondary)',
+                cursor: isDeleting ? 'not-allowed' : 'pointer',
+                fontFamily: "'Inter', sans-serif",
+                fontSize: '0.88rem',
+                fontWeight: 500,
+                transition: 'all 150ms',
+                opacity: isDeleting ? 0.5 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!isDeleting) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = 'transparent';
+              }}
+            >
+              Nah, keep it
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isDeleting}
+              style={{
+                flex: 1,
+                padding: '11px 0',
+                background: isDeleting ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.14)',
+                border: '1px solid rgba(239,68,68,0.35)',
+                borderRadius: '10px',
+                color: 'rgb(239,68,68)',
+                cursor: isDeleting ? 'not-allowed' : 'pointer',
+                fontFamily: "'Inter', sans-serif",
+                fontSize: '0.88rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '7px',
+                transition: 'all 150ms',
+              }}
+              onMouseEnter={(e) => {
+                if (!isDeleting) (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.24)';
+              }}
+              onMouseLeave={(e) => {
+                if (!isDeleting) (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.14)';
+              }}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 size={14} />
+                  Yep, nuke it
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body
+  );
+}
+
 // ── Session list card ──────────────────────────────────────────────────────────
 function SessionCard({
   session,
   isActive,
   onClick,
   opacity,
+  onDeleteRequest,
+  isDeleting,
 }: {
   session: Session;
   isActive: boolean;
   onClick: () => void;
   opacity: number;
+  onDeleteRequest: (session: Session) => void;
+  isDeleting: boolean;
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  function handleTrashClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    onDeleteRequest(session);
+  }
+
   return (
     <div
-      onClick={onClick}
+      onClick={isDeleting ? undefined : onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         padding: '14px 16px',
         borderRadius: 'var(--radius-md)',
         marginBottom: '6px',
-        cursor: 'pointer',
-        background: isActive ? 'rgba(99,102,241,0.14)' : 'transparent',
+        cursor: isDeleting ? 'not-allowed' : 'pointer',
+        background: isActive ? 'rgba(99,102,241,0.14)' : isHovered ? 'rgba(99,102,241,0.06)' : 'transparent',
         border: `1px solid ${isActive ? 'rgba(99,102,241,0.35)' : 'transparent'}`,
-        opacity,
+        opacity: isDeleting ? 0.45 : opacity,
         transition: 'all 150ms',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.06)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLElement).style.background = 'transparent';
-        }
+        position: 'relative',
       }}
     >
-      <p style={{
-        margin: '0 0 4px',
-        fontFamily: "'Inter', sans-serif",
-        fontSize: '0.875rem',
-        fontWeight: 500,
-        color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      }}>
-        {session.session_name || `Voice Session #${session.session_id.slice(-4)}`}
-      </p>
+      {/* Session name + delete icon row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+        <p style={{
+          margin: '0 0 4px',
+          flex: 1,
+          fontFamily: "'Inter', sans-serif",
+          fontSize: '0.875rem',
+          fontWeight: 500,
+          color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {session.session_name || `Voice Session #${session.session_id.slice(-4)}`}
+        </p>
+
+        {/* Trash icon — appears on hover only */}
+        {isHovered && !isDeleting && (
+          <button
+            onClick={handleTrashClick}
+            aria-label="Delete session"
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '22px',
+              height: '22px',
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              color: 'rgba(239,68,68,0.7)',
+              transition: 'all 150ms',
+              padding: 0,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.18)';
+              (e.currentTarget as HTMLElement).style.color = 'rgb(239,68,68)';
+              (e.currentTarget as HTMLElement).style.borderColor = 'rgba(239,68,68,0.45)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)';
+              (e.currentTarget as HTMLElement).style.color = 'rgba(239,68,68,0.7)';
+              (e.currentTarget as HTMLElement).style.borderColor = 'rgba(239,68,68,0.2)';
+            }}
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
+
+        {/* Spinner while deleting */}
+        {isDeleting && (
+          <Loader2
+            size={13}
+            style={{ flexShrink: 0, color: 'rgba(239,68,68,0.6)', animation: 'spin 1s linear infinite' }}
+          />
+        )}
+      </div>
+
+      {/* Turn count + date */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
         <span style={{
           fontFamily: "'JetBrains Mono', monospace",
@@ -241,7 +493,22 @@ export function HistoryPage() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'interrupted'>('all');
   const [copied, setCopied] = useState(false);
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
   const debouncedSearch = useDebounce(search, 200);
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: (sessionId: string) => deleteSession(sessionId),
+    onSuccess: (_data, sessionId) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.removeQueries({ queryKey: ['conversations', sessionId] });
+      if (selectedSessionId === sessionId) setSelectedSessionId(null);
+      setPendingDeleteSession(null);
+    },
+    onError: () => {
+      setPendingDeleteSession(null);
+    },
+  });
 
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
     queryKey: ['sessions'],
@@ -443,11 +710,26 @@ export function HistoryPage() {
                     : 1
                 }
                 onClick={() => setSelectedSessionId(session.session_id)}
+                onDeleteRequest={(s) => setPendingDeleteSession(s)}
+                isDeleting={
+                  deleteMutation.isPending &&
+                  deleteMutation.variables === session.session_id
+                }
               />
             </motion.div>
           ))}
         </div>
       </div>
+
+      {/* ── Delete confirm modal ─────────────────────────────────────────────── */}
+      {pendingDeleteSession && (
+        <DeleteConfirmModal
+          session={pendingDeleteSession}
+          isDeleting={deleteMutation.isPending}
+          onCancel={() => setPendingDeleteSession(null)}
+          onConfirm={() => deleteMutation.mutate(pendingDeleteSession.session_id)}
+        />
+      )}
 
       {/* Transcript viewer */}
       <div style={{

@@ -147,6 +147,9 @@
 /* Shimmer skeleton */
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
+/* Spinner */
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 /* ── Base ───────────────────────────────────────────────────────────────────── */
 @layer base {
   *, *::before, *::after {

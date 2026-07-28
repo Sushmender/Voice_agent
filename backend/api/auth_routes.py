@@ -193,3 +193,48 @@ async def get_sessions(current_user: UserInDB = Depends(get_current_user)):
     )
     return {"sessions": result, "total": len(result)}
 
+
+@router.delete("/sessions/{session_id}", summary="Delete a session and all its conversations")
+async def delete_session(
+    session_id: str,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """
+    Permanently delete a session and every conversation turn belonging to it.
+
+    The user's `conversations` array is updated with a MongoDB $pull that removes
+    all entries where `session_id` matches the supplied value.
+
+    Returns:
+        { deleted: true, session_id: str, turns_deleted: int }
+
+    Raises:
+        404 if the session_id does not exist for this user.
+        500 if the database is unavailable.
+    """
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    user_doc = await db.voice_agent_db.users.find_one({"email": current_user.email})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Count turns that belong to this session before deleting
+    all_convs: list[dict] = user_doc.get("conversations", [])
+    matching_turns = [c for c in all_convs if c.get("session_id") == session_id]
+
+    if not matching_turns:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Pull all turns with this session_id in a single atomic update
+    await db.voice_agent_db.users.update_one(
+        {"email": current_user.email},
+        {"$pull": {"conversations": {"session_id": session_id}}},
+    )
+
+    return {
+        "deleted": True,
+        "session_id": session_id,
+        "turns_deleted": len(matching_turns),
+    }
