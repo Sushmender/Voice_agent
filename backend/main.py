@@ -30,6 +30,7 @@ from backend.db.mongodb import connect_to_mongo, close_mongo_connection
 from backend.api import auth_routes
 from backend.auth.deps import get_current_user
 from backend.models.user import UserInDB
+from backend.memory.short_term import session_exists as mem_session_exists
 
 settings = get_settings()
 
@@ -195,6 +196,37 @@ async def health_check():
         "livekit_url": settings.livekit_url,
         "cerebras_model": settings.cerebras_model,
     }
+
+
+@app.get("/api/session/exists", summary="Check if an InMemory session is still alive")
+async def check_session_exists(
+    room_name: str,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """
+    Frontend calls this after login to determine whether the backend was
+    restarted since the last session.
+
+    - If the backend process restarted, the InMemory _sessions dict is empty
+      and this will return { "exists": false }.
+    - If the backend is still running and the session is active in memory,
+      this returns { "exists": true }.
+
+    The frontend uses this to decide:
+      exists=false  → clear the stored room name, force a new session.
+      exists=true   → existing session can be continued (normal re-login flow).
+
+    Args:
+        room_name: The LiveKit room / session ID to check.
+
+    Returns:
+        { "exists": bool, "room_name": str }
+    """
+    exists = mem_session_exists(room_name)
+    logger.debug(
+        f"[Session] exists check for room '{room_name}' by user '{current_user.email}': {exists}"
+    )
+    return {"exists": exists, "room_name": room_name}
 
 
 @app.post("/api/token", response_model=TokenResponse, summary="Get browser participant token")

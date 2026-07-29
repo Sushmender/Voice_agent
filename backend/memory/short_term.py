@@ -106,6 +106,23 @@ def session_count() -> int:
     return len(_sessions)
 
 
+def session_exists(session_id: str) -> bool:
+    """
+    Return True if the session is currently in InMemory store.
+
+    Used by the /api/session/exists endpoint to let the frontend
+    detect whether the backend was restarted (and the InMemory
+    conversation history was lost) since the last connection.
+
+    Args:
+        session_id: The room / session identifier to look up.
+
+    Returns:
+        True if the session is present in _sessions, False otherwise.
+    """
+    return session_id in _sessions
+
+
 def get_session_length(session_id: str) -> int:
     """Return number of messages in a session."""
     if session_id not in _sessions:

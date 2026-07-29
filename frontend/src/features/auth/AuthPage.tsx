@@ -5,6 +5,7 @@ import { LoginForm } from './components/LoginForm';
 import { SignupForm } from './components/SignupForm';
 import { useLoginMutation, useSignupMutation } from './hooks/useAuth';
 import { toast } from 'sonner';
+import { bootstrapSessionAfterLogin } from '../../lib/sessionBootstrap';
 
 type AuthMode = 'login' | 'signup';
 
@@ -74,16 +75,21 @@ export function AuthPage() {
     return () => clearInterval(id);
   }, []);
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = async () => {
     toast.success('Welcome back! 👋');
-    navigate('/dashboard');
+    // Detect whether the backend was restarted since the last session.
+    // bootstrapSessionAfterLogin() calls /api/session/exists with the stored
+    // room name and clears it if the backend no longer has the session in memory.
+    const { forceNewSession } = await bootstrapSessionAfterLogin();
+    navigate('/dashboard', { state: { forceNewSession } });
   };
 
   const handleSignupSuccess = async (email: string, password: string) => {
     try {
       await loginMutation.mutateAsync({ email, password });
       toast.success('Account created! Welcome aboard 🎉');
-      navigate('/dashboard');
+      // New account — no previous session to check, always a fresh start.
+      navigate('/dashboard', { state: { forceNewSession: false } });
     } catch {
       toast.error('Account created! Please sign in.');
       setMode('login');

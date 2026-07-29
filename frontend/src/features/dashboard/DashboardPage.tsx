@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic,
   Calendar,
@@ -8,6 +8,8 @@ import {
   Zap,
   ChevronRight,
   BarChart3,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { useQuery } from '@tanstack/react-query';
@@ -204,8 +206,14 @@ function SessionRow({ session, index, onClick }: {
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 export function DashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAppStore((s) => s.user);
   const [ctaHovered, setCtaHovered] = React.useState(false);
+
+  // Detect if we were redirected here because the backend was restarted.
+  // AuthPage passes this as router location state after running the session bootstrap.
+  const forceNewSession: boolean = (location.state as { forceNewSession?: boolean })?.forceNewSession ?? false;
+  const [bannerVisible, setBannerVisible] = React.useState(forceNewSession);
 
   const { data: sessionsData, isLoading } = useQuery({
     queryKey: ['sessions'],
@@ -264,6 +272,69 @@ export function DashboardPage() {
           Your AI voice assistant is ready to talk.
         </p>
       </motion.div>
+
+      {/* ── Session-ended banner (shown when backend was killed) ─────────── */}
+      <AnimatePresence>
+        {bannerVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            transition={{ duration: 0.28, ease: [0, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden', marginBottom: '20px' }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+              padding: '14px 18px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(245,158,11,0.08)',
+              border: '1px solid rgba(245,158,11,0.28)',
+            }}>
+              <AlertTriangle
+                size={16}
+                style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }}
+              />
+              <div style={{ flex: 1 }}>
+                <p style={{
+                  margin: '0 0 2px',
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#f59e0b',
+                }}>
+                  Previous session ended
+                </p>
+                <p style={{
+                  margin: 0,
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '0.8rem',
+                  color: 'var(--text-muted)',
+                }}>
+                  The server was restarted. Your conversation history is saved — start a new session below.
+                </p>
+              </div>
+              <button
+                onClick={() => setBannerVisible(false)}
+                aria-label="Dismiss"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-ghost)',
+                  padding: '2px',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Stat cards */}
       <div style={{ display: 'flex', gap: '16px', marginBottom: '28px', flexWrap: 'wrap' }}>

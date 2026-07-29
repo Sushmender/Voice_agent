@@ -59,3 +59,16 @@ export async function deleteSession(
   const { data } = await api.delete(`/auth/sessions/${sessionId}`);
   return data;
 }
+
+// ── Session exists (InMemory check) ───────────────────────────────────────────
+// Called after login to detect whether the backend was restarted and the
+// InMemory conversation history for the stored room is still alive.
+export async function checkSessionExists(
+  roomName: string
+): Promise<{ exists: boolean; room_name: string }> {
+  const { data } = await api.get<{ exists: boolean; room_name: string }>(
+    '/api/session/exists',
+    { params: { room_name: roomName } }
+  );
+  return data;
+}
