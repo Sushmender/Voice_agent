@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 import random
 
-from backend.models.user import UserCreate, UserResponse, Token, UserInDB
+from backend.models.user import UserCreate, UserResponse, Token, UserInDB, AgentSettingsUpdate
 from backend.auth.security import get_password_hash, verify_password, create_access_token
 from backend.auth.deps import get_current_user
 from backend.db.mongodb import get_database
@@ -237,4 +237,66 @@ async def delete_session(
         "deleted": True,
         "session_id": session_id,
         "turns_deleted": len(matching_turns),
+    }
+
+
+@router.get("/agent-settings", summary="Get agent personalization settings for the current user")
+async def get_agent_settings(current_user: UserInDB = Depends(get_current_user)):
+    """
+    Return the agent personalization settings stored for the authenticated user.
+
+    Returns:
+        { system_prompt_override: str, response_style: float }
+    """
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    user_doc = await db.voice_agent_db.users.find_one({"email": current_user.email})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "system_prompt_override": user_doc.get("system_prompt_override", ""),
+        "response_style": user_doc.get("response_style", 0.5),
+    }
+
+
+@router.put("/agent-settings", summary="Save agent personalization settings for the current user")
+async def save_agent_settings(
+    settings_in: AgentSettingsUpdate,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """
+    Persist agent personalization settings to the user's MongoDB document.
+
+    Body:
+        system_prompt_override: str  — custom instructions appended to base prompt (max 500 chars)
+        response_style: float        — 0.0 = ultra-concise, 0.5 = balanced, 1.0 = detailed
+
+    Returns:
+        { saved: true, system_prompt_override: str, response_style: float }
+    """
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    # Enforce 500-char limit on the override
+    override = settings_in.system_prompt_override.strip()[:500]
+
+    # Clamp response_style to [0.0, 1.0]
+    style = max(0.0, min(1.0, settings_in.response_style))
+
+    await db.voice_agent_db.users.update_one(
+        {"email": current_user.email},
+        {"$set": {
+            "system_prompt_override": override,
+            "response_style": style,
+        }},
+    )
+
+    return {
+        "saved": True,
+        "system_prompt_override": override,
+        "response_style": style,
     }

@@ -14,14 +14,16 @@ class AgentState(TypedDict):
     State passed through each node of the LangGraph StateGraph.
 
     Fields:
-        messages:       Full conversation history (HumanMessage / AIMessage).
-                        Uses add_messages reducer to append rather than replace.
-        session_id:     Unique identifier for this conversation session.
-        user_input:     The latest user utterance (injected before memory load).
-        tool_name:      Name of the tool to call (set by llm_node).
-        tool_args:      Arguments for the tool call as a dict.
-        tool_output:    Output from the last MCP tool call (if any).
-        response:       Final response text to be sent to TTS.
+        messages:               Full conversation history (HumanMessage / AIMessage).
+                                Uses add_messages reducer to append rather than replace.
+        session_id:             Unique identifier for this conversation session.
+        user_input:             The latest user utterance (injected before memory load).
+        tool_name:              Name of the tool to call (set by llm_node).
+        tool_args:              Arguments for the tool call as a dict.
+        tool_output:            Output from the last MCP tool call (if any).
+        response:               Final response text to be sent to TTS.
+        system_prompt_override: User-defined custom instructions (appended to base prompt).
+        response_style:         0.0 = ultra-concise, 0.5 = balanced, 1.0 = detailed.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     session_id: str
@@ -33,3 +35,5 @@ class AgentState(TypedDict):
     tool_args: dict         # arguments for the tool
     tool_output: str
     response: str
+    system_prompt_override: str   # custom instructions from Settings → Agent tab
+    response_style: float         # 0.0–1.0 slider value from Settings → Agent tab

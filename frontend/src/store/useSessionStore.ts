@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   AgentState,
   SpeakingState,
+  PipelineStage,
   TranscriptMessage,
   ToolEvent,
   LatencyEntry,
@@ -11,6 +12,7 @@ interface SessionState {
   // Connection
   agentState: AgentState;
   speakingState: SpeakingState;
+  pipelineStage: PipelineStage;
   isMuted: boolean;
   isVolumeOff: boolean;
   error: string | null;
@@ -24,6 +26,7 @@ interface SessionState {
   // Actions
   setAgentState: (state: AgentState) => void;
   setSpeakingState: (state: SpeakingState) => void;
+  setPipelineStage: (stage: PipelineStage) => void;
   setIsMuted: (muted: boolean) => void;
   setIsVolumeOff: (off: boolean) => void;
   setError: (err: string | null) => void;
@@ -47,6 +50,7 @@ interface SessionState {
 const initialState = {
   agentState: 'IDLE' as AgentState,
   speakingState: 'QUIET' as SpeakingState,
+  pipelineStage: 'IDLE' as PipelineStage,
   isMuted: false,
   isVolumeOff: false,
   error: null,
@@ -61,6 +65,7 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   setAgentState: (state) => set({ agentState: state }),
   setSpeakingState: (state) => set({ speakingState: state }),
+  setPipelineStage: (stage) => set({ pipelineStage: stage }),
   setIsMuted: (muted) => set({ isMuted: muted }),
   setIsVolumeOff: (off) => set({ isVolumeOff: off }),
   setError: (err) => set({ error: err }),

@@ -20,6 +20,8 @@ import { SettingsDrawer } from '../settings/components/SettingsDrawer';
 
 import { useVoiceAgent } from './hooks/useVoiceAgent';
 import { useWaveform } from './hooks/useWaveform';
+import { useMicLevel } from './hooks/useMicLevel';
+import { usePipelineStage } from './hooks/usePipelineStage';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSessionStore } from '../../store/useSessionStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -161,7 +163,7 @@ export function ConsolePage() {
 
   const { selectedVoiceId, devMode, setVoiceId } = useSettingsStore();
   const {
-    agentState, speakingState, sessionDuration, error,
+    agentState, speakingState, pipelineStage, sessionDuration, error,
     transcripts, toolEvents, latencyHistory, resetSession,
   } = useSessionStore();
 
@@ -171,16 +173,20 @@ export function ConsolePage() {
     onMicError: (type: 'denied' | 'notfound') => setMicError(type),
   });
 
-  const waveform = useWaveform(audioTrack, { barCount: 20 });
+  const waveform = useWaveform(audioTrack, { barCount: 32 });
   const orbWaveform = useWaveform(audioTrack, { barCount: 7 });
 
   const isIdle = agentState === 'IDLE' || agentState === 'ERROR';
   const isConnected = agentState === 'CONNECTED';
 
-  // Waveform bars — only feed real data when active
-  const activeBars = isConnected && (speakingState === 'SPEAKING' || speakingState === 'LISTENING')
-    ? waveform.bars
-    : Array(20).fill(0);
+  // ── Drive explicit pipeline state machine ──
+  const micLevel = useMicLevel(isConnected, 32);
+
+  usePipelineStage({
+    micIsSpeaking: micLevel.isSpeaking,
+    agentIsSpeaking: waveform.isSpeaking,
+    agentState,
+  });
 
   const activeOrbBars = isConnected && (speakingState === 'SPEAKING' || speakingState === 'LISTENING')
     ? orbWaveform.bars
@@ -400,7 +406,7 @@ export function ConsolePage() {
             {/* Orb */}
             <OrbVisualizer
               agentState={agentState}
-              speakingState={speakingState}
+              pipelineStage={pipelineStage}
               bars={activeOrbBars}
               amplitude={orbWaveform.amplitude}
             />
@@ -411,12 +417,16 @@ export function ConsolePage() {
             {/* Waveform strip */}
             <WaveformStrip
               agentState={agentState}
-              speakingState={speakingState}
-              bars={activeBars}
+              pipelineStage={pipelineStage}
+              micBars={micLevel.bars}
+              agentBars={waveform.bars}
             />
 
             {/* Pipeline strip */}
-            <PipelineStrip agentState={agentState} speakingState={speakingState} />
+            <PipelineStrip
+              agentState={agentState}
+              pipelineStage={pipelineStage}
+            />
 
             {/* Warmup hint */}
             <WarmupHint visible={agentState === 'WARMING_UP'} />

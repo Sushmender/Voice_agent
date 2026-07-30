@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Renderer, Program, Mesh, Triangle, Vec3 } from 'ogl';
 import { cn } from '@/lib/utils';
-import type { AgentState, SpeakingState } from '../../../types/agent';
+import type { AgentState, PipelineStage } from '../../../types/agent';
 
 // ── Shader source ─────────────────────────────────────────────────────────────
 const VERT = /* glsl */ `
@@ -170,16 +170,18 @@ interface OrbParams {
 
 function getOrbParams(
   agentState: AgentState,
-  speakingState: SpeakingState,
+  pipelineStage: PipelineStage,
   amplitude: number,
 ): OrbParams {
   const isError = agentState === 'ERROR';
   const isConnecting = agentState === 'CONNECTING';
   const isWarming = agentState === 'WARMING_UP';
   const isIdle = agentState === 'IDLE';
-  const isListening = agentState === 'CONNECTED' && speakingState === 'LISTENING';
-  const isSpeaking = agentState === 'CONNECTED' && speakingState === 'SPEAKING';
-  const isThinking = agentState === 'CONNECTED' && speakingState === 'QUIET';
+  
+  const isListening = pipelineStage === 'ASR_ACTIVE';
+  const isSpeaking = pipelineStage === 'TTS_ACTIVE';
+  const isThinking = pipelineStage === 'LLM_ACTIVE';
+  const isQuiet = pipelineStage === 'QUIET';
 
   if (isError) {
     return { rotSpeed: 2.2, hoverTarget: 0, hoverIntensityTarget: 0, errorMode: 1, brightness: 1.0 };
@@ -214,17 +216,17 @@ function getOrbParams(
       brightness: Math.min(1.0 + amplitude * 0.2, 1.3),
     };
   }
-  if (isIdle) {
+  if (isIdle || isQuiet) {
     return { rotSpeed: 0.08, hoverTarget: 0, hoverIntensityTarget: 0, errorMode: 0, brightness: 0.75 };
   }
-  // Fallback (CONNECTED + INTERRUPTED, etc.)
+  // Fallback
   return { rotSpeed: 0.15, hoverTarget: 0, hoverIntensityTarget: 0, errorMode: 0, brightness: 0.8 };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 interface OrbVisualizerProps {
   agentState: AgentState;
-  speakingState: SpeakingState;
+  pipelineStage: PipelineStage;
   bars?: number[];
   amplitude?: number;
   className?: string;
@@ -232,7 +234,7 @@ interface OrbVisualizerProps {
 
 export function OrbVisualizer({
   agentState,
-  speakingState,
+  pipelineStage,
   amplitude = 0,
   className,
 }: OrbVisualizerProps) {
@@ -240,12 +242,12 @@ export function OrbVisualizer({
 
   // Store mutable orb params in a ref so the animation loop reads them without
   // needing a re-render on every audio frame.
-  const paramsRef = useRef<OrbParams>(getOrbParams(agentState, speakingState, amplitude));
+  const paramsRef = useRef<OrbParams>(getOrbParams(agentState, pipelineStage, amplitude));
 
   // Keep paramsRef in sync whenever props change
   useEffect(() => {
-    paramsRef.current = getOrbParams(agentState, speakingState, amplitude);
-  }, [agentState, speakingState, amplitude]);
+    paramsRef.current = getOrbParams(agentState, pipelineStage, amplitude);
+  }, [agentState, pipelineStage, amplitude]);
 
   // ── WebGL setup — runs once ─────────────────────────────────────────────────
   useEffect(() => {

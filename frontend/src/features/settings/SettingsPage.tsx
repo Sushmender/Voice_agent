@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Headphones, Brain, Shield, Check } from 'lucide-react';
+import { User, Headphones, Brain, Shield, Check, Info } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { toast } from '../../lib/toast';
+import api from '../../lib/axios';
 
 type Tab = 'profile' | 'audio' | 'agent' | 'account';
 
@@ -263,44 +264,116 @@ function AudioTab() {
 }
 
 // ── Agent tab ──────────────────────────────────────────────────────────────────
-function AgentTab() {
-  const { devMode, toggleDevMode } = useSettingsStore();
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [responseStyle, setResponseStyle] = useState(0.5);
-  const [saved, setSaved] = useState(false);
+const MAX_PROMPT_CHARS = 500;
 
-  function handleSave() {
-    setSaved(true);
-    toast.success('Agent settings saved');
-    setTimeout(() => setSaved(false), 2000);
+const STYLE_LABELS: { max: number; label: string; color: string }[] = [
+  { max: 0.15, label: 'Ultra-Concise',   color: '#6366f1' },
+  { max: 0.35, label: 'Concise',         color: '#818cf8' },
+  { max: 0.65, label: 'Balanced',        color: '#a3e635' },
+  { max: 0.75, label: 'Conversational',  color: '#fb923c' },
+  { max: 1.01, label: 'Detailed',        color: '#f43f5e' },
+];
+
+function getStyleMeta(val: number) {
+  return STYLE_LABELS.find((s) => val <= s.max) ?? STYLE_LABELS[STYLE_LABELS.length - 1];
+}
+
+function AgentTab() {
+  const { devMode, toggleDevMode, systemPromptOverride, responseStyle, setSystemPromptOverride, setResponseStyle } =
+    useSettingsStore();
+
+  const [localPrompt, setLocalPrompt] = useState(systemPromptOverride);
+  const [localStyle, setLocalStyle] = useState(responseStyle);
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Load settings from backend on mount (in case user is on a new device)
+  useEffect(() => {
+    api.get('/auth/agent-settings')
+      .then((res) => {
+        const { system_prompt_override, response_style } = res.data;
+        setLocalPrompt(system_prompt_override ?? '');
+        setLocalStyle(response_style ?? 0.5);
+        setSystemPromptOverride(system_prompt_override ?? '');
+        setResponseStyle(response_style ?? 0.5);
+      })
+      .catch(() => {
+        // fall back to locally cached values
+        setLocalPrompt(systemPromptOverride);
+        setLocalStyle(responseStyle);
+      })
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleSave() {
+    // Enforce 500-char limit client-side too
+    const prompt = localPrompt.trim().slice(0, MAX_PROMPT_CHARS);
+    const style  = Math.min(1, Math.max(0, localStyle));
+
+    setSaving(true);
+    try {
+      await api.put('/auth/agent-settings', {
+        system_prompt_override: prompt,
+        response_style: style,
+      });
+      setSystemPromptOverride(prompt);
+      setResponseStyle(style);
+      setSaved(true);
+      toast.success('Agent settings saved');
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      toast.error('Failed to save agent settings');
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const styleMeta = getStyleMeta(localStyle);
+  const charCount = localPrompt.length;
+  const charOver  = charCount > MAX_PROMPT_CHARS;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '480px' }}>
       <SectionTitle>Agent Configuration</SectionTitle>
 
+      {/* ── System Prompt Override ── */}
       <div>
-        <Label>System Prompt Override</Label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+          <Label>System Prompt Override</Label>
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '0.7rem',
+            color: charOver ? 'var(--status-error)' : charCount > MAX_PROMPT_CHARS * 0.85 ? '#fb923c' : 'var(--text-ghost)',
+            transition: 'color 150ms',
+          }}>
+            {charCount}/{MAX_PROMPT_CHARS}
+          </span>
+        </div>
         <p style={{
           margin: '0 0 10px',
           fontFamily: "'Inter', sans-serif",
           fontSize: '0.8rem',
           color: 'var(--text-muted)',
+          lineHeight: 1.5,
         }}>
-          Customize the agent&apos;s behaviour. Leave blank to use the default.
+          Custom instructions <strong style={{ color: 'var(--text-secondary)' }}>appended</strong> to the base prompt.
+          Leave blank to use the default behaviour.
         </p>
         <textarea
-          value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
-          placeholder="You are a helpful voice assistant…"
+          value={localPrompt}
+          onChange={(e) => setLocalPrompt(e.target.value)}
+          placeholder="e.g. You are a cooking expert. Always relate answers to food when possible."
           aria-label="System prompt override"
+          disabled={loading}
           rows={4}
           style={{
             width: '100%',
             minHeight: '120px',
             padding: '12px 16px',
             background: 'var(--bg-input)',
-            border: '1px solid var(--border-default)',
+            border: `1px solid ${charOver ? 'var(--status-error)' : 'var(--border-default)'}`,
             borderRadius: 'var(--radius-md)',
             color: 'var(--text-primary)',
             fontFamily: "'Inter', sans-serif",
@@ -310,16 +383,38 @@ function AgentTab() {
             outline: 'none',
             boxSizing: 'border-box',
             transition: 'border-color 150ms',
+            opacity: loading ? 0.5 : 1,
           }}
-          onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--border-focus)')}
-          onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-default)')}
+          onFocus={(e) => !charOver && (e.currentTarget.style.borderColor = 'var(--border-focus)')}
+          onBlur={(e) => !charOver && (e.currentTarget.style.borderColor = 'var(--border-default)')}
         />
+        {charOver && (
+          <p style={{ margin: '4px 0 0', fontFamily: "'Inter', sans-serif", fontSize: '0.75rem', color: 'var(--status-error)' }}>
+            Exceeds {MAX_PROMPT_CHARS}-character limit — extra text will be trimmed on save.
+          </p>
+        )}
       </div>
 
+      {/* ── Response Style slider ── */}
       <div>
-        <Label>Response Style</Label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <Label>Response Style</Label>
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '0.72rem',
+            fontWeight: 600,
+            color: styleMeta.color,
+            padding: '2px 8px',
+            background: `${styleMeta.color}18`,
+            border: `1px solid ${styleMeta.color}40`,
+            borderRadius: '6px',
+            transition: 'all 200ms',
+          }}>
+            {styleMeta.label}
+          </span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: '56px' }}>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: '0.78rem', color: 'var(--text-muted)', minWidth: '56px' }}>
             Concise
           </span>
           <input
@@ -327,18 +422,47 @@ function AgentTab() {
             min={0}
             max={1}
             step={0.1}
-            value={responseStyle}
-            onChange={(e) => setResponseStyle(Number(e.target.value))}
-            aria-label="Response style from concise to detailed"
-            style={{ flex: 1, accentColor: 'var(--accent-indigo)' }}
+            value={localStyle}
+            onChange={(e) => setLocalStyle(Number(e.target.value))}
+            aria-label="Response style: concise to detailed"
+            disabled={loading}
+            style={{ flex: 1, accentColor: styleMeta.color, transition: 'accent-color 200ms' }}
           />
-          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: '52px', textAlign: 'right' }}>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: '0.78rem', color: 'var(--text-muted)', minWidth: '52px', textAlign: 'right' }}>
             Detailed
           </span>
         </div>
+        <p style={{ margin: '8px 0 0', fontFamily: "'Inter', sans-serif", fontSize: '0.75rem', color: 'var(--text-ghost)', lineHeight: 1.45 }}>
+          {localStyle <= 0.2 && 'Agent answers in one sentence only.'}
+          {localStyle > 0.2 && localStyle <= 0.4 && 'Agent keeps answers to 1–2 sentences.'}
+          {localStyle > 0.4 && localStyle <= 0.6 && 'Default: 1–3 sentences, natural voice pacing.'}
+          {localStyle > 0.6 && localStyle <= 0.7 && 'Agent can give 3–4 sentences when helpful.'}
+          {localStyle > 0.7 && 'Agent provides comprehensive, in-depth answers.'}
+        </p>
       </div>
 
-      {/* Dev mode toggle */}
+      {/* ── Next-session notice ── */}
+      <div style={{
+        display: 'flex',
+        gap: '10px',
+        padding: '12px 14px',
+        background: 'rgba(99,102,241,0.07)',
+        border: '1px solid rgba(99,102,241,0.2)',
+        borderRadius: '10px',
+      }}>
+        <Info size={14} style={{ color: 'var(--accent-indigo)', flexShrink: 0, marginTop: '2px' }} />
+        <p style={{
+          margin: 0,
+          fontFamily: "'Inter', sans-serif",
+          fontSize: '0.78rem',
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+        }}>
+          Changes apply to your <strong style={{ color: 'var(--text-secondary)' }}>next session</strong>. The current active session will not be affected.
+        </p>
+      </div>
+
+      {/* ── Dev mode toggle ── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -388,17 +512,16 @@ function AgentTab() {
 
       <button
         onClick={handleSave}
+        disabled={saving || loading}
         className="btn-primary"
-        style={{ padding: '12px 28px', alignSelf: 'flex-start' }}
+        style={{ padding: '12px 28px', alignSelf: 'flex-start', opacity: (saving || loading) ? 0.6 : 1 }}
         aria-label="Save agent settings"
       >
         {saved ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Check size={15} /> Saved!
           </span>
-        ) : (
-          'Save Agent Settings'
-        )}
+        ) : saving ? 'Saving…' : 'Save Agent Settings'}
       </button>
     </div>
   );

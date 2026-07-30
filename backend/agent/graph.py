@@ -134,6 +134,8 @@ async def run_agent_turn(
     user_name: str = "User",
     user_id: str = "",
     clean_user_text: str = "",
+    system_prompt_override: str = "",
+    response_style: float = 0.5,
 ) -> dict:
     """
     Convenience wrapper: run one turn of the agent graph.
@@ -171,6 +173,8 @@ async def run_agent_turn(
         "tool_args": {},
         "tool_output": "",
         "response": "",
+        "system_prompt_override": system_prompt_override,
+        "response_style": response_style,
     }
 
     logger.info(

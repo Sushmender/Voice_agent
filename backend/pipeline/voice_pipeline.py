@@ -72,6 +72,8 @@ async def _run_agent_turn(
     user_name: str = "User",
     user_id: str = "",
     clean_user_text: str = "",
+    system_prompt_override: str = "",
+    response_style: float = 0.5,
 ) -> dict:
     """Thin wrapper around backend.agent.graph.run_agent_turn (imported lazily).
     
@@ -85,6 +87,8 @@ async def _run_agent_turn(
         user_name=user_name,
         user_id=user_id,
         clean_user_text=clean_user_text,
+        system_prompt_override=system_prompt_override,
+        response_style=response_style,
     )
 
 
@@ -317,12 +321,16 @@ class LangGraphLLMService(LLMService):
         user_name: str = "User",
         user_id: str = "",
         transport=None,  # LiveKitTransport — for DataChannel send_message
+        system_prompt_override: str = "",
+        response_style: float = 0.5,
     ):
         super().__init__()
         self._session_id = session_id
         self._user_name = user_name
         self._user_id = user_id
         self._transport = transport  # may be None if DataChannel not needed
+        self._system_prompt_override = system_prompt_override
+        self._response_style = response_style
         self._call_count = 0
         self._was_interrupted = False
 
@@ -449,6 +457,8 @@ class LangGraphLLMService(LLMService):
                 user_name=self._user_name,
                 user_id=self._user_id,
                 clean_user_text=clean_user_text,
+                system_prompt_override=self._system_prompt_override,
+                response_style=self._response_style,
             )
         except asyncio.CancelledError:
             # User interrupted mid-turn — clean exit, no memory save (per design).
@@ -565,6 +575,8 @@ async def create_voice_pipeline(
     user_id: str = "",
     vad_analyzer=None,      # accept pre-warmed VAD from prewarm()
     session_id: str | None = None,  # session key for short-term memory
+    system_prompt_override: str = "",
+    response_style: float = 0.5,
 ) -> PipelineWorker:
     """
     Build and return a Pipecat PipelineWorker wired to LiveKit transport.
@@ -681,6 +693,8 @@ async def create_voice_pipeline(
         user_name=user_name,
         user_id=user_id,
         transport=transport,  # passed for DataChannel event emission
+        system_prompt_override=system_prompt_override,
+        response_style=response_style,
     )
     logger.info(f"[Pipeline] LangGraph agent initialised for session '{_session_id}'")
 
@@ -741,6 +755,8 @@ async def run_pipeline(
     user_id: str = "",
     vad_analyzer=None,      #  forwarded from agent_worker prewarm()
     session_id: str | None = None,  # session key for short-term memory
+    system_prompt_override: str = "",
+    response_style: float = 0.5,
 ):
     """Entry point to run the pipeline until the room is empty or an error occurs."""
     start_time = time.perf_counter()
@@ -757,6 +773,8 @@ async def run_pipeline(
         user_id=user_id,
         vad_analyzer=vad_analyzer,
         session_id=session_id or room_name,
+        system_prompt_override=system_prompt_override,
+        response_style=response_style,
     )
 
     # pipecat 1.4.0: add_workers() + run() is the idiomatic pattern.

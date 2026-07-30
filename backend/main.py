@@ -257,6 +257,13 @@ async def get_participant_token(
         )
         logger.info(f"Generated browser token for '{identity}' in room '{request.room_name}'")
 
+        # ── Fetch user agent-personalization settings from MongoDB ───────────────
+        from backend.db.mongodb import get_database as _get_db
+        _db = _get_db()
+        user_doc = await _db.voice_agent_db.users.find_one({"email": current_user.email}) if _db else None
+        system_prompt_override = (user_doc or {}).get("system_prompt_override", "")
+        response_style = float((user_doc or {}).get("response_style", 0.5))
+
         # ── Auto-launch Pipecat pipeline for this room ───────────────────────────
         room_name = request.room_name
         existing = _active_pipelines.get(room_name)
@@ -274,7 +281,9 @@ async def get_participant_token(
                     agent_token=agent_token,
                     voice_id=current_user.voice_id,
                     user_name=current_user.name,
-                    user_id=current_user.id
+                    user_id=current_user.id,
+                    system_prompt_override=system_prompt_override,
+                    response_style=response_style,
                 ),
                 name=f"pipeline-{room_name}",
             )
@@ -294,7 +303,15 @@ async def get_participant_token(
         raise HTTPException(status_code=500, detail=f"Token generation failed: {str(e)}")
 
 
-async def _run_pipeline_task(room_name: str, agent_token: str, voice_id: str, user_name: str, user_id: str):
+async def _run_pipeline_task(
+    room_name: str,
+    agent_token: str,
+    voice_id: str,
+    user_name: str,
+    user_id: str,
+    system_prompt_override: str = "",
+    response_style: float = 0.5,
+):
     """Background asyncio task: run the Pipecat pipeline until the room empties."""
     logger.info(f"[Pipeline] Starting for room '{room_name}'...")
     try:
@@ -306,7 +323,9 @@ async def _run_pipeline_task(room_name: str, agent_token: str, voice_id: str, us
             cartesia_api_key=settings.cartesia_api_key,
             cartesia_voice_id=voice_id,
             user_name=user_name,
-            user_id=user_id
+            user_id=user_id,
+            system_prompt_override=system_prompt_override,
+            response_style=response_style,
         )
     except asyncio.CancelledError:
         logger.info(f"[Pipeline] Cancelled for room '{room_name}'")

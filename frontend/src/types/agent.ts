@@ -12,6 +12,14 @@ export type SpeakingState =
   | 'SPEAKING'
   | 'INTERRUPTED';
 
+// ─── Pipeline stage machine (drives ASR/LLM/TTS indicators) ───────────────────
+export type PipelineStage =
+  | 'IDLE'        // not connected
+  | 'QUIET'       // connected, nothing happening
+  | 'ASR_ACTIVE'  // user is speaking  → Groq Whisper transcribing
+  | 'LLM_ACTIVE'  // user stopped      → Cerebras LLM thinking
+  | 'TTS_ACTIVE'; // agent responding  → Cartesia TTS rendering
+
 // ─── Transcript message ────────────────────────────────────────────────────────
 export interface TranscriptMessage {
   id: string;

@@ -165,6 +165,78 @@ def load_memory(state: AgentState) -> dict[str, Any]:
     return {"messages": history, "tool_name": "", "tool_args": {}, "tool_output": ""}
 
 
+# ── Personalization helpers ──────────────────────────────────────────────────
+
+def _get_style_instruction(style: float) -> str:
+    """
+    Map a 0.0–1.0 response-style slider value to a concrete LLM instruction.
+
+    0.0–0.2  → ultra-concise (1 sentence max)
+    0.3–0.4  → concise (1–2 sentences)
+    0.5      → balanced — no injection, the base prompt already handles this
+    0.6–0.7  → conversational (slightly fuller)
+    0.8–1.0  → detailed (comprehensive, full context)
+    """
+    if style <= 0.2:
+        return (
+            "Keep ALL responses to exactly ONE sentence. "
+            "Be ultra-brief. No elaboration whatsoever."
+        )
+    elif style <= 0.4:
+        return (
+            "Keep responses SHORT — 1 to 2 sentences maximum. "
+            "Only the essential information."
+        )
+    elif style <= 0.6:
+        # balanced — let the base voice prompt govern (1–3 sentences)
+        return ""
+    elif style <= 0.7:
+        return (
+            "You may give slightly fuller answers — up to 3–4 sentences — "
+            "when useful context adds value."
+        )
+    else:
+        return (
+            "Provide COMPREHENSIVE and DETAILED responses. "
+            "Include full context, reasoning, and examples where relevant. "
+            "Do not abbreviate your answer."
+        )
+
+
+def _build_system_prompt(
+    base: str,
+    user_name: str,
+    override: str,
+    style: float,
+) -> str:
+    """
+    Assemble the final system prompt sent to the LLM.
+
+    Order:
+        1. Base voice-agent prompt (voice-optimised defaults)
+        2. User identity line
+        3. Response-style instruction (if not balanced)
+        4. Custom instructions from user (if provided)
+
+    Args:
+        base:      VOICE_AGENT_SYSTEM_PROMPT constant.
+        user_name: Display name of the authenticated user.
+        override:  system_prompt_override from AgentState (may be empty).
+        style:     response_style float 0.0–1.0 from AgentState.
+    """
+    prompt = base
+    prompt += f"\n\nYou are speaking with {user_name}. (You don't need to use their name every time, just be aware of who they are)."
+
+    style_instruction = _get_style_instruction(style)
+    if style_instruction:
+        prompt += f"\n\n## Response Length\n{style_instruction}"
+
+    if override and override.strip():
+        prompt += f"\n\n## Custom Instructions (from user)\n{override.strip()}"
+
+    return prompt
+
+
 async def llm_node(state: AgentState) -> dict[str, Any]:
     """
     Node: llm_node
@@ -182,7 +254,19 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
     messages = list(state.get("messages", []))
 
     user_name = state.get("user_name", "User")
-    system_prompt = VOICE_AGENT_SYSTEM_PROMPT + f"\n\nYou are speaking with {user_name}. (You don't need to use their name every time, just be aware of who they are)."
+    override = state.get("system_prompt_override", "") or ""
+    style = float(state.get("response_style", 0.5))
+
+    system_prompt = _build_system_prompt(
+        base=VOICE_AGENT_SYSTEM_PROMPT,
+        user_name=user_name,
+        override=override,
+        style=style,
+    )
+    logger.debug(
+        f"[llm_node] Session '{state.get('session_id', '')}': "
+        f"style={style:.1f} | override={'yes' if override.strip() else 'none'}"
+    )
 
     # Build the messages list for the Cerebras API
     api_messages = [{"role": "system", "content": system_prompt}]

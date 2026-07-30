@@ -39,6 +39,7 @@ export function useVoiceAgent({
     isVolumeOff,
     setAgentState,
     setSpeakingState,
+    setPipelineStage,
     setIsMuted,
     setIsVolumeOff,
     setError,
@@ -169,6 +170,12 @@ export function useVoiceAgent({
             if (data.role === 'user') {
               // Barge-in: snap from SPEAKING → LISTENING immediately
               setSpeakingState('LISTENING');
+              
+              // If we were stuck in ASR or somehow QUIET, force to LLM thinking
+              const currentStage = useSessionStore.getState().pipelineStage;
+              if (currentStage !== 'LLM_ACTIVE' && currentStage !== 'TTS_ACTIVE') {
+                setPipelineStage('LLM_ACTIVE');
+              }
 
               const msg: TranscriptMessage = {
                 id: generateId(),
@@ -179,6 +186,11 @@ export function useVoiceAgent({
               addTranscript(msg);
             } else if (data.role === 'agent') {
               setSpeakingState('SPEAKING');
+              
+              // Agent is responding, ensure stage is TTS
+              if (useSessionStore.getState().pipelineStage !== 'TTS_ACTIVE') {
+                setPipelineStage('TTS_ACTIVE');
+              }
 
               // Look for existing typing bubble and update it, else create new
               const existingTyping = useSessionStore
@@ -309,9 +321,10 @@ export function useVoiceAgent({
 
     setAgentState('IDLE');
     setSpeakingState('QUIET');
+    setPipelineStage('IDLE');
     setError(null);
     toasts.disconnected();
-  }, [clearWarmupTimer, stopDurationTimer, setAgentState, setSpeakingState, setError]);
+  }, [clearWarmupTimer, stopDurationTimer, setAgentState, setSpeakingState, setPipelineStage, setError]);
 
   // ── Mute toggle ──────────────────────────────────────────────────────────────
   const toggleMute = useCallback(async () => {
@@ -337,10 +350,11 @@ export function useVoiceAgent({
       stopDurationTimer();
       // Set to IDLE to prevent the Disconnected event from thinking it was an error
       setAgentState('IDLE');
+      setPipelineStage('IDLE');
       roomRef.current?.disconnect();
       toasts.dismiss();
     };
-  }, [clearWarmupTimer, stopDurationTimer, setAgentState]);
+  }, [clearWarmupTimer, stopDurationTimer, setAgentState, setPipelineStage]);
 
   return {
     room: roomRef.current,

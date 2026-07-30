@@ -4,6 +4,7 @@ import type { RemoteTrack } from 'livekit-client';
 interface WaveformData {
   amplitude: number; // 0-1 overall amplitude
   bars: number[];    // per-bar values 0-1, length = barCount
+  isSpeaking: boolean; // true while agent audio exceeds threshold (with hysteresis)
 }
 
 interface UseWaveformOptions {
@@ -18,13 +19,20 @@ export function useWaveform(
   const [data, setData] = useState<WaveformData>({
     amplitude: 0,
     bars: Array(barCount).fill(0),
+    isSpeaking: false,
   });
 
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const contextRef = useRef<AudioContext | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const phaseRef = useRef(0); // for synthetic fallback
+  const analyserRef  = useRef<AnalyserNode | null>(null);
+  const sourceRef    = useRef<MediaStreamAudioSourceNode | null>(null);
+  const contextRef   = useRef<AudioContext | null>(null);
+  const rafRef       = useRef<number | null>(null);
+  const phaseRef     = useRef(0); // for synthetic fallback
+
+  // Hysteresis for agent speaking detection
+  const AGENT_THRESHOLD   = 0.025;
+  const AGENT_SILENCE_MS  = 400;
+  const isSpeakingRef     = useRef(false);
+  const silenceTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Synthetic fallback waveform ────────────────────────────────────────────
   const startSynthetic = useCallback(() => {
@@ -34,7 +42,7 @@ export function useWaveform(
         const offset = (i / barCount) * Math.PI * 2;
         return 0.4 + 0.4 * Math.sin(phaseRef.current + offset);
       });
-      setData({ amplitude: 0.5, bars });
+      setData({ amplitude: 0.5, bars, isSpeaking: true });
       rafRef.current = requestAnimationFrame(animate);
     };
     rafRef.current = requestAnimationFrame(animate);
@@ -44,6 +52,10 @@ export function useWaveform(
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+    }
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
   }, []);
 
@@ -84,7 +96,18 @@ export function useWaveform(
             return (binSum / step / 255);
           });
 
-          setData({ amplitude, bars });
+          // ── Agent speaking detection (hysteresis) ───────────────────────
+          if (amplitude > AGENT_THRESHOLD) {
+            if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+            isSpeakingRef.current = true;
+          } else if (isSpeakingRef.current && !silenceTimerRef.current) {
+            silenceTimerRef.current = setTimeout(() => {
+              silenceTimerRef.current = null;
+              isSpeakingRef.current = false;
+            }, AGENT_SILENCE_MS);
+          }
+
+          setData({ amplitude, bars, isSpeaking: isSpeakingRef.current });
           rafRef.current = requestAnimationFrame(animate);
         };
 
@@ -108,7 +131,8 @@ export function useWaveform(
       contextRef.current = null;
     }
     analyserRef.current = null;
-    setData({ amplitude: 0, bars: Array(barCount).fill(0) });
+    isSpeakingRef.current = false;
+    setData({ amplitude: 0, bars: Array(barCount).fill(0), isSpeaking: false });
   }, [stopAnimation, barCount]);
 
   useEffect(() => {
