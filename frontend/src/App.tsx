@@ -12,6 +12,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { queryClient } from './lib/queryClient';
 import { useAppStore } from './store/useAppStore';
 import { AuthPage } from './features/auth/AuthPage';
+import { OAuthCallback } from './features/auth/OAuthCallback';
 import { ConsolePage } from './features/console/ConsolePage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { HistoryPage } from './features/history/HistoryPage';
@@ -130,8 +131,9 @@ export default function App() {
       <BrowserRouter>
         <ErrorBoundary>
           <Routes>
-            <Route path="/"      element={<RootRedirect />} />
-            <Route path="/login" element={<AuthPage />} />
+            <Route path="/"              element={<RootRedirect />} />
+            <Route path="/login"          element={<AuthPage />} />
+            <Route path="/auth/callback" element={<OAuthCallback />} />
             <Route
               path="/*"
               element={

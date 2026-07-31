@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from backend.config import get_settings
 from backend.db.mongodb import connect_to_mongo, close_mongo_connection
-from backend.api import auth_routes
+from backend.api import auth_routes, oauth_routes
 from backend.auth.deps import get_current_user
 from backend.models.user import UserInDB
 from backend.memory.short_term import session_exists as mem_session_exists
@@ -95,6 +95,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_routes.router)
+app.include_router(oauth_routes.router)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────

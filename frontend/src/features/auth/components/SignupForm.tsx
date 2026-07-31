@@ -201,13 +201,14 @@ export function SignupForm({ onSuccess, onSwitchToLogin, signupMutation }: Signu
       {/* OAuth row */}
       <div style={{ display: 'flex', gap: 10 }}>
         {[
-          { Icon: GoogleIcon, label: 'Google' },
-          { Icon: GitHubIcon, label: 'GitHub' },
-        ].map(({ Icon, label }) => (
+          { Icon: GoogleIcon, label: 'Google', href: 'http://localhost:8000/auth/google' },
+          { Icon: GitHubIcon, label: 'GitHub', href: 'http://localhost:8000/auth/github' },
+        ].map(({ Icon, label, href }) => (
           <motion.button
             key={label}
             type="button"
             whileTap={{ scale: 0.97 }}
+            onClick={() => { window.location.href = href; }}
             style={{
               flex: 1,
               display: 'flex',

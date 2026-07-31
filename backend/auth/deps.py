@@ -36,7 +36,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserInDB:
         id=str(user_doc["_id"]),
         name=user_doc.get("name", "User"),
         email=user_doc["email"],
-        hashed_password=user_doc["hashed_password"],
+        hashed_password=user_doc.get("hashed_password"),   # None for OAuth users
         voice_id=user_doc["voice_id"],
+        auth_provider=user_doc.get("auth_provider", "local"),
         conversations=user_doc.get("conversations", [])
     )

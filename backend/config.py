@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field("HS256", description="Algorithm used to sign JWTs")
     jwt_expiration_hours: int = Field(24, description="JWT expiration time in hours")
 
+    # ── OAuth Providers ───────────────────────────────────────────────────────
+    google_client_id: str = Field("", description="Google OAuth client ID")
+    google_client_secret: str = Field("", description="Google OAuth client secret")
+    github_client_id: str = Field("", description="GitHub OAuth client ID")
+    github_client_secret: str = Field("", description="GitHub OAuth client secret")
+    frontend_url: str = Field("http://localhost:5173", description="Frontend base URL for OAuth redirects")
+
     # ── Notion ────────────────────────────────────────────────────────────────
     notion_api_key: str = Field("", description="Notion integration token")
     notion_database_id: str = Field("", description="Notion database ID for notes")
