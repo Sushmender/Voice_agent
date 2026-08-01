@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LoginForm } from './components/LoginForm';
 import { SignupForm } from './components/SignupForm';
@@ -64,10 +64,56 @@ const FEATURES = [
 
 export function AuthPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState<AuthMode>('signup');
   const [activeNode, setActiveNode] = useState(0);
   const loginMutation  = useLoginMutation();
   const signupMutation = useSignupMutation();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Watch for location state to switch mode from redirects
+  useEffect(() => {
+    if (location.state?.mode === 'login' || location.state?.mode === 'signup') {
+      setMode(location.state.mode as AuthMode);
+    }
+  }, [location.state?.mode]);
+
+  // Handle OAuth errors from redirect or location state
+  useEffect(() => {
+    const errorMsg = location.state?.oauthError;
+    const errorQuery = searchParams.get('oauth_error');
+
+    if (errorMsg || errorQuery) {
+      const messages: Record<string, string> = {
+        google_denied:    'Google sign-in was cancelled.',
+        google_token:     'Google authentication failed. Please try again.',
+        google_userinfo:  'Could not fetch Google profile. Please try again.',
+        google_no_email:  'Your Google account has no public email.',
+        github_denied:    'GitHub sign-in was cancelled.',
+        github_token:     'GitHub authentication failed. Please try again.',
+        github_no_email:  'Your GitHub account has no verified email. Please add one at github.com/settings/emails.',
+        account_exists:   'Account already exists please login',
+        account_not_found:'Account info not found please Create account',
+      };
+      
+      const code = errorMsg || errorQuery;
+      const displayMsg = messages[code] || errorMsg || 'OAuth sign-in failed. Please try again.';
+      
+      // Delay slightly to ensure component is mounted and Toaster is ready
+      setTimeout(() => {
+        toast.error(displayMsg);
+      }, 100);
+
+      // Clean up search params and location state
+      if (errorQuery) {
+        setSearchParams(new URLSearchParams());
+      }
+      if (location.state?.oauthError) {
+        navigate(location.pathname, { replace: true, state: { ...location.state, oauthError: undefined } });
+      }
+    }
+  }, [location, searchParams, setSearchParams, navigate]);
 
   // Cycle pipeline node every 1400 ms
   useEffect(() => {

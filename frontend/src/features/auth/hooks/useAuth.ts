@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { login, signup, getMe, getSessions, getConversations } from '../api/authApi';
+import { login, signup, getMe, getSessions, getConversations, updateName } from '../api/authApi';
 import { useAppStore } from '../../../store/useAppStore';
 import { queryClient } from '../../../lib/queryClient';
 
@@ -42,6 +42,20 @@ export function useSignupMutation() {
     }) => signup(name, email, password),
     onError: () => {
       toast.error('Signup failed. This email may already be registered.');
+    },
+  });
+}
+
+// ── Update Name mutation ───────────────────────────────────────────────────────
+export function useUpdateNameMutation() {
+  return useMutation({
+    mutationFn: (name: string) => updateName(name),
+    onSuccess: (data) => {
+      useAppStore.getState().setUser(data);
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: () => {
+      toast.error('Failed to update name. Please try again.');
     },
   });
 }

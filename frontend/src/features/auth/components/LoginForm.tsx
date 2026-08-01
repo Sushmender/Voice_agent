@@ -181,8 +181,8 @@ export function LoginForm({ onSuccess, onSwitchToSignup, loginMutation }: LoginF
       {/* OAuth row */}
       <div style={{ display: 'flex', gap: 10 }}>
         {[
-          { Icon: GoogleIcon, label: 'Google',  href: 'http://localhost:8000/auth/google' },
-          { Icon: GitHubIcon, label: 'GitHub',  href: 'http://localhost:8000/auth/github' },
+          { Icon: GoogleIcon, label: 'Google',  href: 'http://localhost:8000/auth/google?action=login' },
+          { Icon: GitHubIcon, label: 'GitHub',  href: 'http://localhost:8000/auth/github?action=login' },
         ].map(({ Icon, label, href }) => (
           <motion.button
             key={label}

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAppStore } from '../../store/useAppStore';
 import { bootstrapSessionAfterLogin } from '../../lib/sessionBootstrap';
+import { getMe } from './api/authApi';
 
 /**
  * OAuthCallback
@@ -19,6 +20,7 @@ export function OAuthCallback() {
   const navigate      = useNavigate();
   const [params]      = useSearchParams();
   const setToken      = useAppStore((s) => s.setToken);
+  const setUser       = useAppStore((s) => s.setUser);
   const hasRun        = useRef(false);   // guard against double-invocation in StrictMode
 
   useEffect(() => {
@@ -29,33 +31,39 @@ export function OAuthCallback() {
     const oauthError = params.get('oauth_error');
 
     if (oauthError || !token) {
-      const messages: Record<string, string> = {
-        google_denied:    'Google sign-in was cancelled.',
-        google_token:     'Google authentication failed. Please try again.',
-        google_userinfo:  'Could not fetch Google profile. Please try again.',
-        google_no_email:  'Your Google account has no public email.',
-        github_denied:    'GitHub sign-in was cancelled.',
-        github_token:     'GitHub authentication failed. Please try again.',
-        github_no_email:  'Your GitHub account has no verified email. Please add one at github.com/settings/emails.',
-      };
-      toast.error(messages[oauthError ?? ''] ?? 'OAuth sign-in failed. Please try again.');
-      navigate('/login', { replace: true });
+      // Pass the raw error code or message to AuthPage via state
+      const isSignupError = oauthError === 'account_not_found';
+      navigate('/login', { 
+        replace: true, 
+        state: { 
+          mode: isSignupError ? 'signup' : 'login',
+          oauthError: oauthError || 'unknown_error'
+        } 
+      });
       return;
     }
+
+    const needsOnboarding = params.get('needs_onboarding') === 'true';
+    const prefillName = params.get('name') || '';
 
     // Store token (same localStorage key as email/password login)
     setToken(token);
     toast.success('Signed in successfully! 🎉');
 
-    // Check if backend session is still alive
-    bootstrapSessionAfterLogin()
-      .then(({ forceNewSession }) => {
-        navigate('/dashboard', { replace: true, state: { forceNewSession } });
-      })
-      .catch(() => {
-        navigate('/dashboard', { replace: true, state: { forceNewSession: false } });
+    if (needsOnboarding) {
+      navigate('/onboarding', { replace: true, state: { prefillName } });
+      return;
+    }
+
+    // Check if backend session is still alive and fetch user profile
+    Promise.all([
+      bootstrapSessionAfterLogin().catch(() => ({ forceNewSession: false })),
+      getMe().then(setUser).catch(() => {})
+    ])
+      .then(([sessionResult]) => {
+        navigate('/dashboard', { replace: true, state: { forceNewSession: sessionResult.forceNewSession } });
       });
-  }, [params, navigate, setToken]);
+  }, [params, navigate, setToken, setUser]);
 
   return (
     <div

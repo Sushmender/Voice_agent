@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 import jwt
+import uuid
 from backend.config import get_settings
+
+SERVER_INSTANCE_ID = str(uuid.uuid4())
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -15,6 +18,6 @@ def create_access_token(data: dict) -> str:
     settings = get_settings()
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expiration_hours)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "sid": SERVER_INSTANCE_ID})
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     return encoded_jwt

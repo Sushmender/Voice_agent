@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, Headphones, Brain, Shield, Check, Info } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { useUpdateNameMutation } from '../auth/hooks/useAuth';
 import { toast } from '../../lib/toast';
 import api from '../../lib/axios';
 
@@ -59,6 +60,7 @@ function ProfileTab() {
   const user = useAppStore((s) => s.user);
   const [name, setName] = useState(user?.name || '');
   const [saved, setSaved] = useState(false);
+  const updateNameMutation = useUpdateNameMutation();
 
   const initials = user?.name
     .split(' ')
@@ -67,10 +69,16 @@ function ProfileTab() {
     .toUpperCase()
     .slice(0, 2) || '?';
 
-  function handleSave() {
-    setSaved(true);
-    toast.success('Profile settings saved');
-    setTimeout(() => setSaved(false), 2000);
+  async function handleSave() {
+    if (!name.trim()) return;
+    try {
+      await updateNameMutation.mutateAsync(name.trim());
+      setSaved(true);
+      toast.success('Profile settings saved');
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      // Error handled by the mutation hook's toast
+    }
   }
 
   return (
@@ -157,6 +165,7 @@ function ProfileTab() {
       {/* Save */}
       <button
         onClick={handleSave}
+        disabled={updateNameMutation.isPending || !name.trim()}
         className="btn-primary"
         style={{ padding: '12px 28px', alignSelf: 'flex-start' }}
         aria-label="Save profile changes"
@@ -165,6 +174,8 @@ function ProfileTab() {
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Check size={15} /> Saved!
           </span>
+        ) : updateNameMutation.isPending ? (
+          'Saving...'
         ) : (
           'Save Changes'
         )}

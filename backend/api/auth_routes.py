@@ -19,7 +19,7 @@ async def signup(user_in: UserCreate):
     # Check if user exists
     existing_user = await db.voice_agent_db.users.find_one({"email": user_in.email})
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Account already exists please login")
         
     # Assign a random voice_id
     settings = get_settings()
@@ -52,10 +52,15 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(status_code=500, detail="Database not connected")
         
     user_doc = await db.voice_agent_db.users.find_one({"email": form_data.username})
-    if not user_doc or not verify_password(form_data.password, user_doc["hashed_password"]):
+    if not user_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account info not found please Create account"
+        )
+    if not verify_password(form_data.password, user_doc["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect password",
             headers={"WWW-Authenticate": "Bearer"},
         )
         
@@ -67,6 +72,30 @@ async def read_users_me(current_user: UserInDB = Depends(get_current_user)):
     return UserResponse(
         id=current_user.id,
         name=current_user.name,
+        email=current_user.email,
+        voice_id=current_user.voice_id
+    )
+
+
+from pydantic import BaseModel
+
+class UserUpdate(BaseModel):
+    name: str
+
+@router.put("/me", response_model=UserResponse)
+async def update_users_me(user_update: UserUpdate, current_user: UserInDB = Depends(get_current_user)):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not connected")
+    
+    await db.voice_agent_db.users.update_one(
+        {"email": current_user.email},
+        {"$set": {"name": user_update.name}}
+    )
+    
+    return UserResponse(
+        id=current_user.id,
+        name=user_update.name,
         email=current_user.email,
         voice_id=current_user.voice_id
     )

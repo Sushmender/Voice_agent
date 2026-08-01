@@ -35,6 +35,12 @@ export async function getMe(): Promise<User> {
   return data;
 }
 
+// ── Update current user ────────────────────────────────────────────────────────
+export async function updateName(name: string): Promise<User> {
+  const { data } = await api.put<User>('/auth/me', { name });
+  return data;
+}
+
 // ── Conversations ──────────────────────────────────────────────────────────────
 export async function getConversations(
   sessionId?: string,

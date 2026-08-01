@@ -4,6 +4,7 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from backend.config import get_settings
 from backend.models.user import TokenData, UserInDB
+from backend.auth.security import SERVER_INSTANCE_ID
 from backend.db.mongodb import get_database
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -17,6 +18,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserInDB:
     )
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        if payload.get("sid") != SERVER_INSTANCE_ID:
+            raise credentials_exception
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception

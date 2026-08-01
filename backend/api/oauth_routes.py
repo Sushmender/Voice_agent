@@ -36,16 +36,16 @@ GITHUB_USERINFO_URL = "https://api.github.com/user"
 GITHUB_EMAILS_URL   = "https://api.github.com/user/emails"
 
 
-# ── Shared helper: find-or-create user, return JWT ───────────────────────────
-async def _find_or_create_oauth_user(
+# ── Shared helper: handle oauth user based on action ───────────────────────────
+async def _handle_oauth_user(
     email: str,
     name: str,
     provider: str,
-) -> str:
+    action: str,
+) -> tuple[str | None, bool, str | None]:
     """
-    Look up user by email. If they exist, log them in (any provider).
-    If they don't exist, create a new user doc with no password.
-    Returns a signed JWT access token.
+    Handle OAuth user based on action (signup or login).
+    Returns (jwt_token, needs_onboarding, error_string).
     """
     settings = get_settings()
     db = get_database()
@@ -54,11 +54,15 @@ async def _find_or_create_oauth_user(
 
     user_doc = await db.voice_agent_db.users.find_one({"email": email})
 
-    if user_doc is None:
+    if action == "signup":
+        if user_doc:
+            return None, False, "account_exists"
+        
         # New user — assign a random voice_id, no password
         voice_ids = [v.strip() for v in settings.cartesia_voice_ids.split(",") if v.strip()]
         assigned_voice_id = random.choice(voice_ids) if voice_ids else settings.cartesia_voice_id
 
+        # Always trigger onboarding for new OAuth signups so they confirm their name
         user_doc_to_insert = {
             "name": name or email.split("@")[0],
             "email": email,
@@ -69,11 +73,21 @@ async def _find_or_create_oauth_user(
         }
         await db.voice_agent_db.users.insert_one(user_doc_to_insert)
         logger.info(f"[OAuth] Created new {provider} user: {email}")
-    else:
-        logger.info(f"[OAuth] Existing user logged in via {provider}: {email}")
+        
+        access_token = create_access_token(data={"sub": email})
+        return access_token, True, None
 
-    access_token = create_access_token(data={"sub": email})
-    return access_token
+    elif action == "login":
+        if not user_doc:
+            return None, False, "account_not_found"
+        
+        logger.info(f"[OAuth] Existing user logged in via {provider}: {email}")
+        access_token = create_access_token(data={"sub": email})
+        return access_token, False, None
+        
+    else:
+        # Default fallback if action is missing or invalid
+        return None, False, "invalid_action"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -81,7 +95,7 @@ async def _find_or_create_oauth_user(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/auth/google", summary="Redirect to Google OAuth consent screen")
-async def google_login():
+async def google_login(action: str = "login"):
     settings = get_settings()
     if not settings.google_client_id:
         raise HTTPException(status_code=501, detail="Google OAuth not configured")
@@ -93,14 +107,16 @@ async def google_login():
         "scope":         "openid email profile",
         "access_type":   "online",
         "prompt":        "select_account",
+        "state":         action,
     }
     url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
     return RedirectResponse(url)
 
 
 @router.get("/auth/google/callback", summary="Google OAuth callback")
-async def google_callback(code: str | None = None, error: str | None = None):
+async def google_callback(code: str | None = None, state: str | None = None, error: str | None = None):
     settings = get_settings()
+    action = state or "login"
 
     if error or not code:
         return RedirectResponse(f"{settings.frontend_url}/login?oauth_error=google_denied")
@@ -140,8 +156,15 @@ async def google_callback(code: str | None = None, error: str | None = None):
     if not email:
         return RedirectResponse(f"{settings.frontend_url}/login?oauth_error=google_no_email")
 
-    jwt_token = await _find_or_create_oauth_user(email, name, "google")
-    return RedirectResponse(f"{settings.frontend_url}/auth/callback?token={jwt_token}")
+    jwt_token, needs_onboarding, oauth_err = await _handle_oauth_user(email, name, "google", action)
+    if oauth_err:
+        return RedirectResponse(f"{settings.frontend_url}/auth/callback?oauth_error={oauth_err}")
+    
+    redirect_url = f"{settings.frontend_url}/auth/callback?token={jwt_token}"
+    if needs_onboarding:
+        redirect_url += f"&needs_onboarding=true&name={urlencode({'n': name})[2:]}"
+    
+    return RedirectResponse(redirect_url)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -149,7 +172,7 @@ async def google_callback(code: str | None = None, error: str | None = None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/auth/github", summary="Redirect to GitHub OAuth consent screen")
-async def github_login():
+async def github_login(action: str = "login"):
     settings = get_settings()
     if not settings.github_client_id:
         raise HTTPException(status_code=501, detail="GitHub OAuth not configured")
@@ -158,14 +181,16 @@ async def github_login():
         "client_id":    settings.github_client_id,
         "redirect_uri": "http://localhost:8000/auth/github/callback",
         "scope":        "user:email",
+        "state":        action,
     }
     url = f"{GITHUB_AUTH_URL}?{urlencode(params)}"
     return RedirectResponse(url)
 
 
 @router.get("/auth/github/callback", summary="GitHub OAuth callback")
-async def github_callback(code: str | None = None, error: str | None = None):
+async def github_callback(code: str | None = None, state: str | None = None, error: str | None = None):
     settings = get_settings()
+    action = state or "login"
 
     if error or not code:
         return RedirectResponse(f"{settings.frontend_url}/login?oauth_error=github_denied")
@@ -226,5 +251,12 @@ async def github_callback(code: str | None = None, error: str | None = None):
     if not email:
         return RedirectResponse(f"{settings.frontend_url}/login?oauth_error=github_no_email")
 
-    jwt_token = await _find_or_create_oauth_user(email, name, "github")
-    return RedirectResponse(f"{settings.frontend_url}/auth/callback?token={jwt_token}")
+    jwt_token, needs_onboarding, oauth_err = await _handle_oauth_user(email, name, "github", action)
+    if oauth_err:
+        return RedirectResponse(f"{settings.frontend_url}/auth/callback?oauth_error={oauth_err}")
+    
+    redirect_url = f"{settings.frontend_url}/auth/callback?token={jwt_token}"
+    if needs_onboarding:
+        redirect_url += f"&needs_onboarding=true&name={urlencode({'n': name})[2:]}"
+        
+    return RedirectResponse(redirect_url)
