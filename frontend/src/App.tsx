@@ -14,6 +14,7 @@ import { useAppStore } from './store/useAppStore';
 import { AuthPage } from './features/auth/AuthPage';
 import { OAuthCallback } from './features/auth/OAuthCallback';
 import { OnboardingPage } from './features/auth/OnboardingPage';
+import { WarmupPage } from './features/auth/WarmupPage';
 import { ConsolePage } from './features/console/ConsolePage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { HistoryPage } from './features/history/HistoryPage';
@@ -138,6 +139,12 @@ export default function App() {
             <Route path="/onboarding"     element={
               <ProtectedRoute>
                 <OnboardingPage />
+              </ProtectedRoute>
+            } />
+            {/* Standalone warmup screen — no sidebar/topbar */}
+            <Route path="/warming-up"     element={
+              <ProtectedRoute>
+                <WarmupPage />
               </ProtectedRoute>
             } />
             <Route

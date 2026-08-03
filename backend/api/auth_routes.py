@@ -9,7 +9,7 @@ from backend.auth.security import get_password_hash, verify_password, create_acc
 from backend.auth.deps import get_current_user
 from backend.db.mongodb import get_database
 from backend.config import get_settings
-from backend.pipeline.warmup import trigger_warmup
+from backend.pipeline.warmup import trigger_warmup, get_warmup_status
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,6 +76,13 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     asyncio.create_task(trigger_warmup())
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/warmup-status")
+async def warmup_status(current_user: UserInDB = Depends(get_current_user)):
+    """Return the current warmup progress for frontend polling."""
+    return get_warmup_status()
+
 
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: UserInDB = Depends(get_current_user)):

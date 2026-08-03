@@ -61,7 +61,7 @@ export function OAuthCallback() {
       getMe().then(setUser).catch(() => {})
     ])
       .then(([sessionResult]) => {
-        navigate('/dashboard', { replace: true, state: { forceNewSession: sessionResult.forceNewSession } });
+        navigate('/warming-up', { replace: true, state: { forceNewSession: sessionResult.forceNewSession } });
       });
   }, [params, navigate, setToken, setUser]);
 

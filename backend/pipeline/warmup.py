@@ -27,7 +27,25 @@ logger = logging.getLogger(__name__)
 
 # Guard: only run once per server process
 _warmup_done = False
-_warmup_lock = asyncio.Lock()
+_warmup_lock: asyncio.Lock | None = None
+
+# Live step tracking — updated as each stage completes.
+# Possible values: "idle" | "starting" | "langgraph" | "groq" | "cerebras" | "done"
+_warmup_step: str = "idle"
+_warmup_elapsed: float = 0.0
+_warmup_start_time: float = 0.0
+
+
+def get_warmup_status() -> dict:
+    """Return the current warmup status for polling by the frontend."""
+    elapsed = _warmup_elapsed if _warmup_done else (
+        time.perf_counter() - _warmup_start_time if _warmup_start_time > 0 else 0.0
+    )
+    return {
+        "done": _warmup_done,
+        "step": _warmup_step,
+        "elapsed": round(elapsed, 2),
+    }
 
 
 async def _warm_langgraph() -> None:
@@ -103,23 +121,40 @@ async def _warm_cerebras() -> None:
 
 async def run_warmup() -> None:
     """
-    Run all three warm-ups concurrently.
+    Run all three warm-ups sequentially so _warmup_step reflects real progress.
 
     Called internally by trigger_warmup() — do not call directly.
     """
-    t0 = time.perf_counter()
+    global _warmup_step, _warmup_elapsed, _warmup_start_time
+
+    # Silence the expected HTTP 400 from Groq (empty WAV ping) — it's not an error.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    _warmup_start_time = time.perf_counter()
+    _warmup_step = "starting"
     logger.info("[Warmup] 🔥 Starting background warm-up (LangGraph + Groq + Cerebras)...")
 
-    # Run all three in parallel — they are fully independent
-    await asyncio.gather(
-        _warm_langgraph(),
-        _warm_groq(),
-        _warm_cerebras(),
-        return_exceptions=True,  # never raise — warmup must be silent
-    )
+    try:
+        _warmup_step = "langgraph"
+        await _warm_langgraph()
+    except Exception as exc:
+        logger.debug(f"[Warmup] LangGraph step error (non-fatal): {exc}")
 
-    elapsed = time.perf_counter() - t0
-    logger.info(f"[Warmup] 🚀 All services warmed up in {elapsed:.2f}s — first voice query will be fast!")
+    try:
+        _warmup_step = "groq"
+        await _warm_groq()
+    except Exception as exc:
+        logger.debug(f"[Warmup] Groq step error (non-fatal): {exc}")
+
+    try:
+        _warmup_step = "cerebras"
+        await _warm_cerebras()
+    except Exception as exc:
+        logger.debug(f"[Warmup] Cerebras step error (non-fatal): {exc}")
+
+    _warmup_elapsed = time.perf_counter() - _warmup_start_time
+    _warmup_step = "done"
+    logger.info(f"[Warmup] 🚀 All services warmed up in {_warmup_elapsed:.2f}s — first voice query will be fast!")
 
 
 async def trigger_warmup() -> None:
@@ -130,12 +165,17 @@ async def trigger_warmup() -> None:
     - Sets _warmup_done = True after the first successful run.
     - Subsequent calls return immediately without hitting any APIs.
     """
-    global _warmup_done
+    global _warmup_done, _warmup_lock
 
     # Fast path — already done, skip without acquiring lock
     if _warmup_done:
         logger.debug("[Warmup] Already warmed up — skipping")
         return
+
+    # Lazy-init the lock inside the active event loop to prevent
+    # 'attached to a different loop' RuntimeError in FastAPI
+    if _warmup_lock is None:
+        _warmup_lock = asyncio.Lock()
 
     async with _warmup_lock:
         # Re-check inside the lock (another coroutine may have beaten us)

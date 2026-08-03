@@ -127,7 +127,7 @@ export function AuthPage() {
     // bootstrapSessionAfterLogin() calls /api/session/exists with the stored
     // room name and clears it if the backend no longer has the session in memory.
     const { forceNewSession } = await bootstrapSessionAfterLogin();
-    navigate('/dashboard', { state: { forceNewSession } });
+    navigate('/warming-up', { state: { forceNewSession } });
   };
 
   const handleSignupSuccess = async (email: string, password: string) => {
@@ -135,7 +135,7 @@ export function AuthPage() {
       await loginMutation.mutateAsync({ email, password });
       toast.success('Account created! Welcome aboard 🎉');
       // New account — no previous session to check, always a fresh start.
-      navigate('/dashboard', { state: { forceNewSession: false } });
+      navigate('/warming-up', { state: { forceNewSession: false } });
     } catch {
       toast.error('Account created! Please sign in.');
       setMode('login');
