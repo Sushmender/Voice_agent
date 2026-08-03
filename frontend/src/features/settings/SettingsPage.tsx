@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, Headphones, Brain, Shield, Check, Info } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { useSessionStore } from '../../store/useSessionStore';
 import { useUpdateNameMutation } from '../auth/hooks/useAuth';
 import { toast } from '../../lib/toast';
 import api from '../../lib/axios';
@@ -541,9 +542,15 @@ function AgentTab() {
 // ── Account tab ────────────────────────────────────────────────────────────────
 function AccountTab() {
   const logout = useAppStore((s) => s.logout);
+  const resetSession = useSessionStore((s) => s.resetSession);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteEmail, setDeleteEmail] = useState('');
   const user = useAppStore((s) => s.user);
+
+  const handleLogout = () => {
+    resetSession(); // clear transcripts & tool events for the next user
+    logout();
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', maxWidth: '480px' }}>
@@ -553,7 +560,7 @@ function AccountTab() {
       <div>
         <Label>Sign Out</Label>
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="btn-secondary"
           style={{ padding: '10px 20px' }}
           aria-label="Sign out of your account"
@@ -627,7 +634,7 @@ function AccountTab() {
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 disabled={deleteEmail !== user?.email}
-                onClick={logout}
+                onClick={handleLogout}
                 style={{
                   padding: '9px 16px',
                   background: deleteEmail === user?.email ? 'rgba(239,68,68,0.18)' : 'rgba(239,68,68,0.06)',

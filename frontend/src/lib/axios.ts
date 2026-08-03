@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAppStore } from '../store/useAppStore';
+import { useSessionStore } from '../store/useSessionStore';
 
 const api = axios.create({
   baseURL: '/',
@@ -22,6 +23,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      useSessionStore.getState().resetSession(); // clear transcripts & tool events
       useAppStore.getState().logout();
       window.location.href = '/login';
     }

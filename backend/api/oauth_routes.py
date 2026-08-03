@@ -9,6 +9,7 @@ Routes:
   GET /auth/github           → redirect browser to GitHub consent screen
   GET /auth/github/callback  → exchange code, mint JWT, redirect to frontend
 """
+import asyncio
 import logging
 import random
 from urllib.parse import urlencode
@@ -20,6 +21,7 @@ from fastapi.responses import RedirectResponse
 from backend.auth.security import create_access_token
 from backend.config import get_settings
 from backend.db.mongodb import get_database
+from backend.pipeline.warmup import trigger_warmup
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["oauth"])
@@ -75,6 +77,10 @@ async def _handle_oauth_user(
         logger.info(f"[OAuth] Created new {provider} user: {email}")
         
         access_token = create_access_token(data={"sub": email})
+
+        # Fire warm-up in the background — doesn't block the OAuth redirect
+        asyncio.create_task(trigger_warmup())
+
         return access_token, True, None
 
     elif action == "login":
@@ -83,6 +89,10 @@ async def _handle_oauth_user(
         
         logger.info(f"[OAuth] Existing user logged in via {provider}: {email}")
         access_token = create_access_token(data={"sub": email})
+
+        # Fire warm-up in the background — doesn't block the OAuth redirect
+        asyncio.create_task(trigger_warmup())
+
         return access_token, False, None
         
     else:

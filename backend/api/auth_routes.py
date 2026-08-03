@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 import random
@@ -7,6 +9,7 @@ from backend.auth.security import get_password_hash, verify_password, create_acc
 from backend.auth.deps import get_current_user
 from backend.db.mongodb import get_database
 from backend.config import get_settings
+from backend.pipeline.warmup import trigger_warmup
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,7 +40,10 @@ async def signup(user_in: UserCreate):
     }
     
     result = await db.voice_agent_db.users.insert_one(user_doc)
-    
+
+    # Fire warm-up in the background — doesn't block the signup response
+    asyncio.create_task(trigger_warmup())
+
     return UserResponse(
         id=str(result.inserted_id),
         name=user_doc["name"],
@@ -65,6 +71,10 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
         
     access_token = create_access_token(data={"sub": user_doc["email"]})
+
+    # Fire warm-up in the background — doesn't block the login response
+    asyncio.create_task(trigger_warmup())
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserResponse)

@@ -12,6 +12,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { useSessionStore } from '../../store/useSessionStore';
 import { toast } from 'sonner';
 
 interface SidebarProps {
@@ -30,9 +31,11 @@ const navItems = [
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { user, logout } = useAppStore();
+  const resetSession = useSessionStore((s) => s.resetSession);
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    resetSession(); // clear transcripts, tool events, latency for the next user
     logout();
     toast.success('Signed out successfully');
     navigate('/login');
