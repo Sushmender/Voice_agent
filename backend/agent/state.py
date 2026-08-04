@@ -37,3 +37,11 @@ class AgentState(TypedDict):
     response: str
     system_prompt_override: str   # custom instructions from Settings → Agent tab
     response_style: float         # 0.0–1.0 slider value from Settings → Agent tab
+
+    # Dev Mode Metrics
+    llm_latency: float
+    tool_latency: float
+    mongo_fetch_latency: float
+    mongo_save_latency: float
+    input_tokens: int
+    output_tokens: int

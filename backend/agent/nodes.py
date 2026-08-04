@@ -17,6 +17,7 @@ pointed at the Cerebras base URL.
 """
 import json
 import logging
+import time
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -149,6 +150,7 @@ def load_memory(state: AgentState) -> dict[str, Any]:
     -----------------
     Retrieve short-term session history and append the latest user utterance.
     """
+    start_time = time.perf_counter()
     session_id = state.get("session_id", "default")
     user_input = state.get("user_input", "")
     # Use the clean display text for the in-memory HumanMessage so short-term
@@ -162,7 +164,9 @@ def load_memory(state: AgentState) -> dict[str, Any]:
     logger.debug(
         f"[load_memory] Session '{session_id}': loaded {len(history)} messages"
     )
-    return {"messages": history, "tool_name": "", "tool_args": {}, "tool_output": ""}
+    
+    mongo_fetch_latency = (time.perf_counter() - start_time) * 1000
+    return {"messages": history, "tool_name": "", "tool_args": {}, "tool_output": "", "mongo_fetch_latency": mongo_fetch_latency}
 
 
 # ── Personalization helpers ──────────────────────────────────────────────────
@@ -293,6 +297,7 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
     )
 
     try:
+        start_time = time.perf_counter()
         client = _get_cerebras_client()
 
         # Try with tool-calling first
@@ -305,6 +310,9 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
                 max_tokens=512,
                 temperature=0.7,
             )
+
+            input_tokens = completion.usage.prompt_tokens if hasattr(completion, 'usage') and completion.usage else 0
+            output_tokens = completion.usage.completion_tokens if hasattr(completion, 'usage') and completion.usage else 0
 
             choice = completion.choices[0]
             finish_reason = choice.finish_reason
@@ -322,11 +330,15 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
                     f"[llm_node] Session '{session_id}': tool_call → "
                     f"{tool_name}({tool_args})"
                 )
+                llm_latency = (time.perf_counter() - start_time) * 1000
                 return {
                     "tool_name": tool_name,
                     "tool_args": tool_args,
                     "response": "",
                     "messages": [],
+                    "llm_latency": llm_latency,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
                 }
 
             # ── Direct response branch ────────────────────────────────────────
@@ -344,13 +356,20 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
                 temperature=0.7,
             )
             response_text = completion.choices[0].message.content.strip()
+            
+            input_tokens = completion.usage.prompt_tokens if hasattr(completion, 'usage') and completion.usage else 0
+            output_tokens = completion.usage.completion_tokens if hasattr(completion, 'usage') and completion.usage else 0
 
+        llm_latency = (time.perf_counter() - start_time) * 1000
         logger.info(f"[llm_node] Session '{session_id}': response = '{response_text[:80]}'")
         return {
             "response": response_text,
             "messages": [AIMessage(content=response_text)],
             "tool_name": "",
             "tool_args": {},
+            "llm_latency": llm_latency,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
 
     except Exception as exc:
@@ -376,6 +395,7 @@ async def tool_node(state: AgentState) -> dict[str, Any]:
     Returns:
         Partial state dict with tool_output populated.
     """
+    start_time = time.perf_counter()
     tool_name = state.get("tool_name", "")
     tool_args = state.get("tool_args", {})
     session_id = state.get("session_id", "default")
@@ -388,8 +408,9 @@ async def tool_node(state: AgentState) -> dict[str, Any]:
         logger.error(f"[tool_node] Error executing '{tool_name}': {exc}", exc_info=True)
         result = f"The {tool_name} tool encountered an error: {exc}"
 
+    tool_latency = (time.perf_counter() - start_time) * 1000
     logger.info(f"[tool_node] Result: '{str(result)[:120]}'")
-    return {"tool_output": str(result)}
+    return {"tool_output": str(result), "tool_latency": tool_latency}
 
 
 async def _dispatch_tool(tool_name: str, args: dict) -> str:
@@ -445,6 +466,7 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
     Returns:
         Partial state dict with response and updated messages.
     """
+    start_time = time.perf_counter()
     settings = get_settings()
     session_id = state.get("session_id", "default")
     tool_name = state.get("tool_name", "unknown")
@@ -487,6 +509,9 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
         )
         response_text = completion.choices[0].message.content.strip()
         
+        input_tokens = completion.usage.prompt_tokens if hasattr(completion, 'usage') and completion.usage else 0
+        output_tokens = completion.usage.completion_tokens if hasattr(completion, 'usage') and completion.usage else 0
+        
         # Clean up any hallucinated JSON tool call prefixed to the response
         import re
         response_text = re.sub(r'^\{.*?\}\s*', '', response_text).strip()
@@ -498,10 +523,19 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
         logger.error(f"[format_tool_response] LLM error: {exc}", exc_info=True)
         # Fall back to returning tool output directly (still useful)
         response_text = tool_output
+        input_tokens = 0
+        output_tokens = 0
+
+    llm_latency = state.get("llm_latency", 0) + (time.perf_counter() - start_time) * 1000
+    total_input = state.get("input_tokens", 0) + input_tokens
+    total_output = state.get("output_tokens", 0) + output_tokens
 
     return {
         "response": response_text,
         "messages": [AIMessage(content=response_text)],
+        "llm_latency": llm_latency,
+        "input_tokens": total_input,
+        "output_tokens": total_output,
     }
 
 
@@ -546,6 +580,7 @@ async def save_memory(state: AgentState) -> dict[str, Any]:
     Persist the latest human + assistant message exchange to short-term memory.
     Also log the exchange to the user's conversation history in MongoDB.
     """
+    start_time = time.perf_counter()
     session_id = state.get("session_id", "default")
     user_id = state.get("user_id", "")
     messages = list(state.get("messages", []))
@@ -604,4 +639,5 @@ async def save_memory(state: AgentState) -> dict[str, Any]:
     if turn_count in [2, 4] and last_human and user_id:
         asyncio.create_task(_generate_session_title(user_id, session_id, state.get("display_user_input", "") or last_human))
 
-    return {}
+    mongo_save_latency = (time.perf_counter() - start_time) * 1000
+    return {"mongo_save_latency": mongo_save_latency}

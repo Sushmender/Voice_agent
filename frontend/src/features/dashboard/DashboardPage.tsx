@@ -521,7 +521,7 @@ export function DashboardPage() {
                 key={session.session_id}
                 session={session}
                 index={i}
-                onClick={() => navigate('/history')}
+                onClick={() => navigate('/history', { state: { selectedSessionId: session.session_id } })}
               />
             ))}
           </div>

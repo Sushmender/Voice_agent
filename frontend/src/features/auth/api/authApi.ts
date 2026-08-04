@@ -78,3 +78,27 @@ export async function checkSessionExists(
   );
   return data;
 }
+
+// ── Continue Session (DB → InMemory hydration) ─────────────────────────────────
+// Loads a past session's conversation turns from MongoDB into the backend
+// InMemory store so the agent resumes with full context.
+export async function continueSession(sessionId: string): Promise<{
+  status: 'hydrated' | 'already_live';
+  session_id: string;
+  messages_loaded: number;
+  turns_found: number;
+}> {
+  const { data } = await api.post(`/auth/sessions/${sessionId}/continue`);
+  return data;
+}
+
+// ── Stop Active Pipeline ───────────────────────────────────────────────────────
+// Cancels the live Pipecat pipeline for a room. Called before switching sessions
+// when the user is currently connected to a different room.
+export async function stopActivePipeline(roomName: string): Promise<{
+  stopped: boolean;
+  room_name: string;
+}> {
+  const { data } = await api.delete(`/api/pipeline/${encodeURIComponent(roomName)}`);
+  return data;
+}

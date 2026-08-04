@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, MessageSquare, Clock, ChevronRight } from 'lucide-react';
+import { Plus, MessageSquare, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useGetSessions } from '../../auth/hooks/useAuth';
 import { LoadingSkeleton } from '../../../components/shared/LoadingSkeleton';
 import type { Session } from '../../../types/auth';
@@ -34,9 +35,17 @@ export function SessionsSidebar({
   onSessionSelect,
   onNewSession,
 }: SessionsSidebarProps) {
+  const navigate = useNavigate();
   const { data, isLoading } = useGetSessions();
   const sessions = data?.sessions ?? [];
   const groups = groupSessionsByDate(sessions);
+
+  function handleSessionClick(sessionId: string) {
+    // Notify parent (so ConsolePage can update its activeSessionId label)
+    onSessionSelect(sessionId);
+    // Navigate to History page with this session pre-selected
+    navigate('/history', { state: { selectedSessionId: sessionId } });
+  }
 
   return (
     <div className="flex flex-col h-full bg-surface border-r border-border w-64 flex-shrink-0">
@@ -82,7 +91,8 @@ export function SessionsSidebar({
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: gi * 0.05 + si * 0.04 }}
-                    onClick={() => onSessionSelect(session.session_id)}
+                    onClick={() => handleSessionClick(session.session_id)}
+                    title="View transcript & continue session"
                     className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-surface-raised transition-colors ${
                       activeSessionId === session.session_id
                         ? 'border-l-2 border-accent-indigo bg-accent-indigo/5'
@@ -101,7 +111,6 @@ export function SessionsSidebar({
                         <span className="text-xs text-text-muted">{session.turn_count} turns</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-3 h-3 text-text-muted flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100" />
                   </motion.button>
                 ))}
               </AnimatePresence>

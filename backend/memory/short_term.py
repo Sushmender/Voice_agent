@@ -106,6 +106,49 @@ def session_count() -> int:
     return len(_sessions)
 
 
+def hydrate_session_from_history(session_id: str, turns: list) -> int:
+    """
+    Pre-populate the InMemory session store from persisted MongoDB conversation turns.
+
+    Called by the 'Continue Session' endpoint before a new pipeline starts, so
+    that the agent's load_memory node finds historical context already in memory.
+
+    Each turn in `turns` should be a dict with at minimum:
+        { "User_query": str, "LLM_response": str }
+
+    Messages are loaded oldest-first up to the session's maxlen window.
+
+    Args:
+        session_id: The room / session key to hydrate.
+        turns:      Ordered list of conversation turn dicts from MongoDB.
+
+    Returns:
+        Number of individual messages loaded (2 per turn: user + assistant).
+    """
+    if session_id not in _sessions:
+        _sessions[session_id] = deque(maxlen=settings.max_session_history)
+    else:
+        # Clear existing (stale) messages before loading fresh DB history
+        _sessions[session_id].clear()
+
+    count = 0
+    for turn in turns:
+        user_q = turn.get("User_query", "").strip()
+        agent_r = turn.get("LLM_response", "").strip()
+        if user_q:
+            _sessions[session_id].append(HumanMessage(content=user_q))
+            count += 1
+        if agent_r:
+            _sessions[session_id].append(AIMessage(content=agent_r))
+            count += 1
+
+    logger.info(
+        f"[Memory] Hydrated session '{session_id}' "
+        f"with {count} messages from {len(turns)} DB turns."
+    )
+    return count
+
+
 def session_exists(session_id: str) -> bool:
     """
     Return True if the session is currently in InMemory store.

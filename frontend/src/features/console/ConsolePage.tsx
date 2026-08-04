@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronDown, Clock, Keyboard, Settings, Cpu } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getConversations } from '../auth/api/authApi';
 
 import { SessionsSidebar } from './components/SessionsSidebar';
 import { OrbVisualizer } from './components/OrbVisualizer';
@@ -17,6 +18,7 @@ import { LatencyPanel } from './components/LatencyPanel';
 import { KeyboardShortcutsModal } from '../../components/shared/KeyboardShortcutsModal';
 import { MicPermissionBanner } from '../../components/shared/MicPermissionBanner';
 import { SettingsDrawer } from '../settings/components/SettingsDrawer';
+import { DevModeHUD } from './components/DevModeHUD';
 
 import { useVoiceAgent } from './hooks/useVoiceAgent';
 import { useWaveform } from './hooks/useWaveform';
@@ -213,6 +215,53 @@ export function ConsolePage() {
     resetSession();
   };
 
+  // ── Historical transcript preload ─────────────────────────────────────────
+  // When navigated here from "Continue Session", pre-populate the transcript
+  // store with the past session's conversation turns so the user can see
+  // context before speaking.
+  const location = useLocation();
+  useEffect(() => {
+    const state = location.state as { continuedSessionId?: string } | null;
+    const continuedId = state?.continuedSessionId;
+    if (!continuedId) return;
+
+    // Clear router state so back-navigation doesn't re-trigger
+    window.history.replaceState({}, '');
+
+    let cancelled = false;
+    getConversations(continuedId, 200).then(({ conversations }) => {
+      if (cancelled || !conversations.length) return;
+
+      const historicalMsgs = conversations.flatMap((turn, i) => [
+        {
+          id: `hist-u-${i}`,
+          role: 'user' as const,
+          text: turn.User_query,
+          timestamp: turn.timestamp || `${turn.Date}T${turn.Time}`,
+          isHistorical: true,
+        },
+        {
+          id: `hist-a-${i}`,
+          role: 'agent' as const,
+          text: turn.LLM_response,
+          timestamp: turn.timestamp || `${turn.Date}T${turn.Time}`,
+          isHistorical: true,
+        },
+      ]);
+
+      // Replace transcripts with the historical ones
+      // (resetSession was already called in HistoryPage before navigation)
+      const { addTranscript } = useSessionStore.getState();
+      historicalMsgs.forEach((msg) => addTranscript(msg));
+    }).catch(() => {
+      // Non-fatal — the agent still has context in InMemory
+    });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   // Right panel tabs — show latency only in devMode
   const rightTabs: { id: RightTab; label: string }[] = [
     { id: 'transcript', label: 'TRANSCRIPT' },
@@ -223,6 +272,7 @@ export function ConsolePage() {
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', position: 'relative' }}>
       <BackgroundLayers agentState={agentState} />
+      <DevModeHUD />
 
       {/* Sessions sidebar */}
       <SessionsSidebar

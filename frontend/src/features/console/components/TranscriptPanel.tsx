@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Trash2 } from 'lucide-react';
+import { Copy, Trash2, History } from 'lucide-react';
 import { useSessionStore } from '../../../store/useSessionStore';
 import { toasts } from '../../../lib/toast';
 import type { SpeakingState } from '../../../types/agent';
@@ -53,7 +53,6 @@ function renderTextWithLinks(text: string, linkColor: string): React.ReactNode[]
         </a>
       );
     }
-    // Reset just in case
     URL_REGEX.lastIndex = 0;
     return part;
   });
@@ -65,10 +64,25 @@ interface BubbleProps {
   text: string;
   timestamp: string;
   isTyping?: boolean;
+  isHistorical?: boolean;
 }
 
-function TranscriptBubble({ role, text, timestamp, isTyping }: BubbleProps) {
+function TranscriptBubble({ role, text, timestamp, isTyping, isHistorical }: BubbleProps) {
   const isUser = role === 'user';
+
+  // Historical messages use dimmed colours; live messages use full brightness
+  const borderColor = isHistorical
+    ? (isUser ? 'rgba(34,197,94,0.3)' : 'rgba(99,102,241,0.3)')
+    : (isUser ? '#22c55e' : '#6366f1');
+  const bgColor = isHistorical
+    ? (isUser ? 'rgba(34,197,94,0.03)' : 'rgba(99,102,241,0.04)')
+    : (isUser ? 'rgba(34,197,94,0.06)' : 'rgba(99,102,241,0.07)');
+  const textColor = isHistorical
+    ? (isUser ? 'rgba(134,239,172,0.55)' : 'rgba(165,180,252,0.55)')
+    : (isUser ? '#86efac' : '#a5b4fc');
+  const labelColor = isHistorical
+    ? (isUser ? 'rgba(34,197,94,0.4)' : 'rgba(99,102,241,0.4)')
+    : (isUser ? '#22c55e' : '#6366f1');
 
   return (
     <motion.div
@@ -78,13 +92,14 @@ function TranscriptBubble({ role, text, timestamp, isTyping }: BubbleProps) {
       style={{
         padding: '12px 16px',
         borderRadius: '12px',
-        borderLeft: `2px solid ${isUser ? '#22c55e' : '#6366f1'}`,
-        background: isUser ? 'rgba(34,197,94,0.06)' : 'rgba(99,102,241,0.07)',
+        borderLeft: `2px solid ${borderColor}`,
+        background: bgColor,
         maxWidth: '100%',
         wordBreak: 'break-word',
         lineHeight: 1.55,
         fontSize: '0.88rem',
-        color: isUser ? '#86efac' : '#a5b4fc',
+        color: textColor,
+        opacity: isHistorical ? 0.8 : 1,
       }}
     >
       {/* Header row */}
@@ -95,7 +110,7 @@ function TranscriptBubble({ role, text, timestamp, isTyping }: BubbleProps) {
           fontWeight: 600,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          color: isUser ? '#22c55e' : '#6366f1',
+          color: labelColor,
         }}>
           {isUser ? 'You' : 'Agent'}
         </span>
@@ -123,10 +138,42 @@ function TranscriptBubble({ role, text, timestamp, isTyping }: BubbleProps) {
         </div>
       ) : (
         <p style={{ margin: 0 }}>
-          {renderTextWithLinks(text, isUser ? '#86efac' : '#a5b4fc')}
+          {renderTextWithLinks(text, textColor)}
         </p>
       )}
     </motion.div>
+  );
+}
+
+// ── Section divider ───────────────────────────────────────────────────────────
+function SectionDivider({ label, color, icon }: { label: string; color: string; icon?: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '6px 0',
+      flexShrink: 0,
+    }}>
+      <div style={{ flex: 1, height: '1px', background: color, opacity: 0.2 }} />
+      <span style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '5px',
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: '0.6rem',
+        fontWeight: 600,
+        letterSpacing: '0.1em',
+        color,
+        opacity: 0.55,
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+      }}>
+        {icon}
+        {label}
+      </span>
+      <div style={{ flex: 1, height: '1px', background: color, opacity: 0.2 }} />
+    </div>
   );
 }
 
@@ -151,6 +198,14 @@ export function TranscriptPanel({ speakingState }: TranscriptPanelProps) {
     toasts.copied();
   };
 
+  // Find where historical section ends
+  const lastHistoricalIdx = transcripts.reduce<number>(
+    (last, msg, i) => (msg.isHistorical ? i : last),
+    -1
+  );
+  const hasHistorical = lastHistoricalIdx >= 0;
+  const hasLive = transcripts.some((m) => !m.isHistorical);
+
   return (
     <div style={{
       display: 'flex',
@@ -168,15 +223,36 @@ export function TranscriptPanel({ speakingState }: TranscriptPanelProps) {
         background: 'rgba(8,11,18,0.5)',
         flexShrink: 0,
       }}>
-        <span style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: '0.72rem',
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          letterSpacing: '0.08em',
-        }}>
-          TRANSCRIPT
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '0.72rem',
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            letterSpacing: '0.08em',
+          }}>
+            TRANSCRIPT
+          </span>
+          {hasHistorical && (
+            <span style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '0.58rem',
+              fontWeight: 600,
+              color: 'var(--accent-indigo)',
+              background: 'rgba(99,102,241,0.1)',
+              border: '1px solid rgba(99,102,241,0.2)',
+              borderRadius: '4px',
+              padding: '2px 6px',
+              letterSpacing: '0.06em',
+            }}>
+              <History size={9} />
+              &nbsp;CONTINUED
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: '4px' }}>
           <button
             onClick={handleCopy}
@@ -262,15 +338,48 @@ export function TranscriptPanel({ speakingState }: TranscriptPanelProps) {
               </div>
             </motion.div>
           ) : (
-            transcripts.map((msg) => (
-              <TranscriptBubble
-                key={msg.id}
-                role={msg.role}
-                text={msg.text}
-                timestamp={msg.timestamp}
-                isTyping={msg.isTyping}
-              />
-            ))
+            <>
+              {/* Past session divider at the top */}
+              {hasHistorical && (
+                <motion.div
+                  key="past-divider"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <SectionDivider
+                    label="Past Session"
+                    color="rgba(99,102,241,0.9)"
+                    icon={<History size={9} />}
+                  />
+                </motion.div>
+              )}
+
+              {transcripts.map((msg, index) => (
+                <React.Fragment key={msg.id}>
+                  {/* Live session divider — inserted after the last historical message */}
+                  {hasHistorical && hasLive && index === lastHistoricalIdx + 1 && (
+                    <motion.div
+                      key="live-divider"
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <SectionDivider
+                        label="Live Session"
+                        color="rgba(34,197,94,0.9)"
+                      />
+                    </motion.div>
+                  )}
+                  <TranscriptBubble
+                    role={msg.role}
+                    text={msg.text}
+                    timestamp={msg.timestamp}
+                    isTyping={msg.isTyping}
+                    isHistorical={msg.isHistorical}
+                  />
+                </React.Fragment>
+              ))}
+            </>
           )}
         </AnimatePresence>
       </div>

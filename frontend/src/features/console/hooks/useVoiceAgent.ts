@@ -220,6 +220,21 @@ export function useVoiceAgent({
               turn: data.turn,
             });
             toasts.toolUsed(data.name);
+          } else if (data.type === 'latency_event') {
+            useSessionStore.getState().addLatencyEntry({
+              turn: data.turn,
+              asr: data.asr,
+              tts: data.tts,
+              llm: data.llm,
+              tool: data.tool,
+              mongo_fetch: data.mongo_fetch,
+              mongo_save: data.mongo_save,
+              input_tokens: data.input_tokens,
+              output_tokens: data.output_tokens,
+              ttfb: 0, // No longer tracked here
+              total: data.total,
+              timestamp: data.timestamp,
+            });
           }
         } catch {
           // Non-JSON payload — ignore

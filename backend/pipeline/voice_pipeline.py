@@ -333,6 +333,8 @@ class LangGraphLLMService(LLMService):
         self._response_style = response_style
         self._call_count = 0
         self._was_interrupted = False
+        self.turn_stats = {}  # Store metrics per turn for LatencyLogger
+
 
     # ── DataChannel helper ────────────────────────────────────────────────────
     async def _emit_dc(self, data: dict) -> None:
@@ -487,6 +489,16 @@ class LangGraphLLMService(LLMService):
 
         if not response_text:
             response_text = "I'm sorry, I didn't get a response. Could you repeat that?"
+            
+        # Store metrics for this turn so LatencyLogger can fetch them
+        self.turn_stats[self._call_count] = {
+            "llm": result.get("llm_latency", 0.0),
+            "tool": result.get("tool_latency", 0.0),
+            "mongo_fetch": result.get("mongo_fetch_latency", 0.0),
+            "mongo_save": result.get("mongo_save_latency", 0.0),
+            "input_tokens": result.get("input_tokens", 0),
+            "output_tokens": result.get("output_tokens", 0),
+        }
 
         logger.info(
             f"[LangGraphLLM] Turn #{self._call_count} | "
@@ -682,10 +694,6 @@ async def create_voice_pipeline(
         ),
     )
 
-    # ── Latency Logger  (passthrough timing middleware) ────────────────
-    from backend.pipeline.latency_logger import LatencyLoggerProcessor
-    latency_logger = LatencyLoggerProcessor()
-
     # ── LLM (LangGraph agent — Cerebras + short-term memory) ───────────
     _session_id = session_id or room_name
     llm = LangGraphLLMService(
@@ -697,6 +705,34 @@ async def create_voice_pipeline(
         response_style=response_style,
     )
     logger.info(f"[Pipeline] LangGraph agent initialised for session '{_session_id}'")
+
+    # ── Latency Logger  (passthrough timing middleware) ────────────────
+    from backend.pipeline.latency_logger import LatencyLoggerProcessor, SharedLatencyState
+    
+    async def _on_turn_complete(turn_latency):
+        stats = llm.turn_stats.get(turn_latency.turn_number, {})
+        payload = {
+            "type": "latency_event",
+            "turn": turn_latency.turn_number,
+            "asr": turn_latency.asr_ms or 0,
+            "tts": turn_latency.tts_ms or 0,
+            "total": turn_latency.total_ms or 0,
+            "llm": stats.get("llm", 0),
+            "tool": stats.get("tool", 0),
+            "mongo_fetch": stats.get("mongo_fetch", 0),
+            "mongo_save": stats.get("mongo_save", 0),
+            "input_tokens": stats.get("input_tokens", 0),
+            "output_tokens": stats.get("output_tokens", 0),
+            "timestamp": time.time(),
+        }
+        try:
+            import json
+            await transport.send_message(json.dumps(payload))
+            logger.info(f"[DataChannel] Broadcasted latency stats for turn {turn_latency.turn_number}")
+        except Exception as e:
+            logger.error(f"[DataChannel] Failed to broadcast latency stats: {e}")
+            
+    shared_latency_state = SharedLatencyState(on_turn_complete=_on_turn_complete)
 
     # ── TTS (Cartesia Sonic) ──────────────────────────────────────────────────
     # CartesiaTTSService.Settings accepts: voice, model, language, generation_config.
@@ -721,13 +757,16 @@ async def create_voice_pipeline(
         [
             transport.input(),      # receive audio frames from LiveKit
             vad_processor,          # 🎙️ VAD: end-of-speech detection (Silero)
+            LatencyLoggerProcessor(shared_latency_state),
             interruption_handler,   # 🚨 barge-in: user speech mid-bot-speech → interrupt
             stt,                    # speech → text  (Groq Whisper)
-            latency_logger,         # 📊 per-stage timing (passthrough)
+            LatencyLoggerProcessor(shared_latency_state),
             greeting,               # 🔔 one-shot "I'm ready!" on pipeline start
             llm,                    # text → response text (LangGraph + Cerebras)
+            LatencyLoggerProcessor(shared_latency_state),
             tts,                    # response text → audio (Cartesia Sonic)
             tracker,                # 👁️ track BotStartedSpeakingFrame right before output
+            LatencyLoggerProcessor(shared_latency_state),
             transport.output(),     # send audio frames back to LiveKit
         ]
     )

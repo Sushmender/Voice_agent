@@ -196,4 +196,10 @@ async def run_agent_turn(
         "response": response,
         "tool_name": tool_name,
         "tool_output": tool_output,
+        "llm_latency": result.get("llm_latency", 0.0),
+        "tool_latency": result.get("tool_latency", 0.0),
+        "mongo_fetch_latency": result.get("mongo_fetch_latency", 0.0),
+        "mongo_save_latency": result.get("mongo_save_latency", 0.0),
+        "input_tokens": result.get("input_tokens", 0),
+        "output_tokens": result.get("output_tokens", 0),
     }

@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import ReactDOM from 'react-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Mic, Download, Copy, Check, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Search, Mic, Download, Copy, Check, Trash2, Loader2, AlertTriangle, PlayCircle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSessions, getConversations, deleteSession } from '../auth/api/authApi';
+import { getSessions, getConversations, deleteSession, continueSession, stopActivePipeline } from '../auth/api/authApi';
+import { useSessionStore } from '../../store/useSessionStore';
 import type { Session, ConversationTurn } from '../../types/auth';
 
 // ── URL-aware text renderer ────────────────────────────────────────────────────
@@ -489,13 +491,60 @@ function HistoryBubble({ turn }: { turn: ConversationTurn }) {
 
 // ── Main History page ──────────────────────────────────────────────────────────
 export function HistoryPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'interrupted'>('all');
   const [copied, setCopied] = useState(false);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
+  const [isContinuing, setIsContinuing] = useState(false);
   const debouncedSearch = useDebounce(search, 200);
   const queryClient = useQueryClient();
+  const { resetSession } = useSessionStore();
+
+  const LS_KEY = 'voice_agent_room_name';
+
+  // Auto-select session when navigating here from Dashboard or Console sidebar
+  React.useEffect(() => {
+    const state = location.state as { selectedSessionId?: string } | null;
+    if (state?.selectedSessionId) {
+      setSelectedSessionId(state.selectedSessionId);
+      // Clear so back-navigation doesn't re-trigger the auto-select
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
+
+  // ── Continue Session handler ──────────────────────────────────────────────
+  async function handleContinueSession() {
+    if (!selectedSessionId || isContinuing) return;
+    setIsContinuing(true);
+    try {
+      // 1. If the user currently has an active room, stop its pipeline cleanly
+      const currentRoom = localStorage.getItem(LS_KEY);
+      if (currentRoom && currentRoom !== selectedSessionId) {
+        try {
+          await stopActivePipeline(currentRoom);
+        } catch {
+          // Non-fatal — pipeline may already be stopped
+        }
+      }
+
+      // 2. Hydrate InMemory with this session's history
+      await continueSession(selectedSessionId);
+
+      // 3. Set this session as the active room and reset frontend state
+      localStorage.setItem(LS_KEY, selectedSessionId);
+      resetSession();
+
+      // 4. Navigate to console
+      navigate('/console', { state: { continuedSessionId: selectedSessionId } });
+    } catch (err) {
+      console.error('[ContinueSession] Failed:', err);
+    } finally {
+      setIsContinuing(false);
+    }
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (sessionId: string) => deleteSession(sessionId),
@@ -816,7 +865,61 @@ export function HistoryPage() {
                     {selectedSession?.turn_count} turns · {selectedSession ? relativeDate(selectedSession) : ''}
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {/* ── Continue Session ──────────────────────────────── */}
+                  <button
+                    id="continue-session-btn"
+                    onClick={handleContinueSession}
+                    disabled={isContinuing || !selectedSessionId}
+                    aria-label="Continue this session in the voice console"
+                    title="Continue this session"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      background: isContinuing
+                        ? 'rgba(99,102,241,0.15)'
+                        : 'linear-gradient(135deg, rgba(99,102,241,0.22) 0%, rgba(168,85,247,0.16) 100%)',
+                      border: '1px solid rgba(99,102,241,0.45)',
+                      borderRadius: '8px',
+                      color: isContinuing ? 'rgba(165,180,252,0.6)' : '#a5b4fc',
+                      cursor: isContinuing ? 'not-allowed' : 'pointer',
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      transition: 'all 150ms',
+                      opacity: isContinuing ? 0.7 : 1,
+                      boxShadow: isContinuing ? 'none' : '0 0 16px rgba(99,102,241,0.15)',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isContinuing) {
+                        (e.currentTarget as HTMLElement).style.background =
+                          'linear-gradient(135deg, rgba(99,102,241,0.32) 0%, rgba(168,85,247,0.24) 100%)';
+                        (e.currentTarget as HTMLElement).style.boxShadow = '0 0 24px rgba(99,102,241,0.28)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isContinuing) {
+                        (e.currentTarget as HTMLElement).style.background =
+                          'linear-gradient(135deg, rgba(99,102,241,0.22) 0%, rgba(168,85,247,0.16) 100%)';
+                        (e.currentTarget as HTMLElement).style.boxShadow = '0 0 16px rgba(99,102,241,0.15)';
+                      }
+                    }}
+                  >
+                    {isContinuing ? (
+                      <>
+                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                        Resuming…
+                      </>
+                    ) : (
+                      <>
+                        <PlayCircle size={13} />
+                        Continue Session
+                      </>
+                    )}
+                  </button>
+
                   <button
                     onClick={handleDownload}
                     aria-label="Download transcript"

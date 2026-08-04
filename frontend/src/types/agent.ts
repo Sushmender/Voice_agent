@@ -26,7 +26,8 @@ export interface TranscriptMessage {
   role: 'user' | 'agent';
   text: string;
   timestamp: string; // ISO string
-  isTyping?: boolean; // true while agent is streaming
+  isTyping?: boolean;    // true while agent is streaming
+  isHistorical?: boolean; // true for pre-loaded past-session messages
 }
 
 // ─── Tool event ────────────────────────────────────────────────────────────────
@@ -42,8 +43,16 @@ export interface ToolEvent {
 // ─── Latency tracking ─────────────────────────────────────────────────────────
 export interface LatencyEntry {
   turn: number;
-  ttfb: number;      // ms to first agent byte
-  total: number;     // ms to end of agent utterance
+  asr: number;       // from backend LatencyLoggerProcessor
+  tts: number;       // from backend LatencyLoggerProcessor
+  llm: number;
+  tool: number;
+  mongo_fetch: number;
+  mongo_save: number;
+  input_tokens: number;
+  output_tokens: number;
+  ttfb: number;      // client-side TTFB (kept for backward compat)
+  total: number;     // from backend LatencyLoggerProcessor
   timestamp: string;
 }
 
@@ -66,4 +75,19 @@ export interface DCToolEvent {
   turn?: number;
 }
 
-export type DCPayload = DCTranscript | DCToolEvent;
+export interface DCLatencyEvent {
+  type: 'latency_event';
+  turn: number;
+  asr: number;
+  tts: number;
+  total: number;
+  llm: number;
+  tool: number;
+  mongo_fetch: number;
+  mongo_save: number;
+  input_tokens: number;
+  output_tokens: number;
+  timestamp: string;
+}
+
+export type DCPayload = DCTranscript | DCToolEvent | DCLatencyEvent;

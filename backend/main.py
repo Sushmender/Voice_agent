@@ -230,6 +230,42 @@ async def check_session_exists(
     return {"exists": exists, "room_name": room_name}
 
 
+@app.delete("/api/pipeline/{room_name}", summary="Stop an active voice pipeline")
+async def stop_pipeline(
+    room_name: str,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """
+    Cancel the active Pipecat pipeline task for a given room.
+
+    Called by the frontend before 'Continue Session' when the user is already
+    in an active session and wants to switch to a different historical session.
+    The pipeline's finally block will pop the room from _active_pipelines and
+    clear_session() should be called before the new session is hydrated.
+
+    Returns:
+        { "stopped": bool, "room_name": str }
+    """
+    from backend.memory.short_term import clear_session as mem_clear_session
+
+    task = _active_pipelines.get(room_name)
+    if task and not task.done():
+        task.cancel()
+        logger.info(f"[Pipeline] Stop requested for room '{room_name}' by '{current_user.email}'")
+        # Give the task a brief moment to begin cancellation
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        # Clear InMemory for this room so hydration starts fresh
+        mem_clear_session(room_name)
+        return {"stopped": True, "room_name": room_name}
+
+    # No active pipeline found — still clear memory as a safety measure
+    mem_clear_session(room_name)
+    return {"stopped": False, "room_name": room_name}
+
+
 @app.post("/api/token", response_model=TokenResponse, summary="Get browser participant token")
 async def get_participant_token(
     request: TokenRequest,

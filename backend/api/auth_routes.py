@@ -286,6 +286,82 @@ async def delete_session(
     }
 
 
+@router.post("/sessions/{session_id}/continue", summary="Hydrate InMemory from a past session")
+async def continue_session(
+    session_id: str,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """
+    Load a past session's conversation history from MongoDB into the InMemory
+    short-term memory store so the agent can continue with full context.
+
+    Flow:
+      1. Fetch all conversation turns for this session_id from MongoDB.
+      2. Always (re-)hydrate _sessions[session_id] with the full DB history
+         so the model has complete context — even if partially live.
+      3. Return status + counts for the frontend to display.
+
+    After this call the frontend sets its room_name = session_id and calls
+    POST /api/token. The pipeline's load_memory node finds the hydrated history.
+
+    Returns:
+        {
+            "status": "hydrated" | "already_live",
+            "session_id": str,
+            "messages_loaded": int,
+            "turns_found": int,
+        }
+
+    Raises:
+        404  if the session_id is not found for this user.
+        500  if the database is unavailable.
+    """
+    import logging as _logging
+    from backend.memory.short_term import (
+        hydrate_session_from_history,
+        session_exists as mem_session_exists,
+    )
+
+    _logger = _logging.getLogger(__name__)
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    user_doc = await db.voice_agent_db.users.find_one({"email": current_user.email})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    all_convs: list[dict] = user_doc.get("conversations", [])
+    session_turns = [c for c in all_convs if c.get("session_id") == session_id]
+
+    if not session_turns:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Sort chronologically (oldest first) so message order is correct
+    session_turns.sort(
+        key=lambda c: c.get("timestamp") or f'{c.get("Date", "")}T{c.get("Time", "")}',
+    )
+
+    already_live = mem_session_exists(session_id)
+    status_label = "already_live" if already_live else "hydrated"
+
+    # Always re-hydrate to ensure full DB history is loaded
+    messages_loaded = hydrate_session_from_history(session_id, session_turns)
+
+    _logger.info(
+        f"[ContinueSession] user='{current_user.email}' session='{session_id}' "
+        f"status={status_label} messages_loaded={messages_loaded}"
+    )
+
+    return {
+        "status": status_label,
+        "session_id": session_id,
+        "messages_loaded": messages_loaded,
+        "turns_found": len(session_turns),
+    }
+
+
 @router.get("/agent-settings", summary="Get agent personalization settings for the current user")
 async def get_agent_settings(current_user: UserInDB = Depends(get_current_user)):
     """
