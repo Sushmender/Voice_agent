@@ -38,6 +38,26 @@ async def web_search(query: str, max_results: int = 3) -> str:
     if DDGS is None:
         return "The web search tool is not available. Please install duckduckgo-search."
 
+    # ── Temporal enrichment ───────────────────────────────────────────────────
+    import re
+    from datetime import datetime
+    current_year = str(datetime.now().year)
+    _year_re = re.compile(r'\b(20\d{2})\b')
+    _time_keywords_re = re.compile(
+        r'\b(latest|recent|newest|current|who won|champion|winner|standings|ranking)\b',
+        re.IGNORECASE,
+    )
+    existing_year = _year_re.search(query)
+    if existing_year:
+        if existing_year.group(1) != current_year and _time_keywords_re.search(query):
+            # LLM embedded a stale training-data year in a "latest" query — replace it
+            query = _year_re.sub(current_year, query)
+            logger.info(f"[WebSearch] Stale-year replaced query: '{query}'")
+    else:
+        # No year at all — append current year so DuckDuckGo surfaces fresh results
+        query = f"{query} {current_year}"
+        logger.info(f"[WebSearch] Year-enriched query: '{query}'")
+
     try:
         # Run synchronous DDGS in a thread to avoid blocking the event loop
         def _search():
@@ -90,6 +110,24 @@ async def news_search(topic: str, max_results: int = 3) -> str:
 
     if DDGS is None:
         return "The web search tool is not available. Please install duckduckgo-search."
+
+    # ── Temporal enrichment ───────────────────────────────────────────────────
+    import re
+    from datetime import datetime
+    current_year = str(datetime.now().year)
+    _year_re = re.compile(r'\b(20\d{2})\b')
+    _time_keywords_re = re.compile(
+        r'\b(latest|recent|newest|current|who won|champion|winner|standings|ranking)\b',
+        re.IGNORECASE,
+    )
+    existing_year = _year_re.search(topic)
+    if existing_year:
+        if existing_year.group(1) != current_year and _time_keywords_re.search(topic):
+            topic = _year_re.sub(current_year, topic)
+            logger.info(f"[NewsSearch] Stale-year replaced topic: '{topic}'")
+    else:
+        topic = f"{topic} {current_year}"
+        logger.info(f"[NewsSearch] Year-enriched topic: '{topic}'")
 
     try:
         def _search():

@@ -22,7 +22,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from backend.agent.prompts import FALLBACK_MESSAGE, TOOL_ERROR_MESSAGE, VOICE_AGENT_SYSTEM_PROMPT
+from backend.agent.prompts import FALLBACK_MESSAGE, TOOL_ERROR_MESSAGE, get_voice_agent_system_prompt
 from backend.agent.state import AgentState
 from backend.config import get_settings
 from backend.db.mongodb import get_database
@@ -68,7 +68,14 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web using DuckDuckGo for current information.",
+            "description": (
+                "Search the web for current, up-to-date information. "
+                "ALWAYS use this tool (never rely on training-data memory) for questions about: "
+                "recent or latest events, sports results, winners, champions, standings; "
+                "movie/game/album/product release status ('is X out yet?', 'has X been released?'); "
+                "current news, prices, scores, records, or rankings; "
+                "anything involving the words 'latest', 'recent', 'current', 'now', 'today', 'who won', 'newest'."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -262,7 +269,7 @@ async def llm_node(state: AgentState) -> dict[str, Any]:
     style = float(state.get("response_style", 0.5))
 
     system_prompt = _build_system_prompt(
-        base=VOICE_AGENT_SYSTEM_PROMPT,
+        base=get_voice_agent_system_prompt(),
         user_name=user_name,
         override=override,
         style=style,
@@ -479,23 +486,38 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
     )
 
     user_name = state.get("user_name", "User")
-    system_prompt = VOICE_AGENT_SYSTEM_PROMPT + f"\n\nYou are speaking with {user_name}. (You don't need to use their name every time, just be aware of who they are)."
+    # Use a tightly-scoped system prompt for this formatting step.
+    # Keep it explicit about the NO-JSON rule — the LLM tends to hallucinate
+    # tool calls here when the search result is ambiguous or the context is large.
+    format_system_prompt = (
+        get_voice_agent_system_prompt()
+        + f"\n\nYou are speaking with {user_name}. "
+        "(You don't need to use their name every time, just be aware of who they are).\n\n"
+        "## STRICT OUTPUT RULE FOR THIS RESPONSE\n"
+        "You are summarising a tool result into a spoken voice reply.\n"
+        "- Output ONLY plain English sentences. Nothing else.\n"
+        "- NEVER output JSON, curly braces, brackets, code, tool names, or function calls.\n"
+        "- NEVER start your reply with '{', '[', '`', or any non-alphabetic character.\n"
+        "- If the tool result is unclear or incomplete, say so naturally in plain English."
+    )
 
-    # Build context: inject the tool result as an assistant turn
-    api_messages = [{"role": "system", "content": system_prompt}]
+    # Build context: inject the tool result as a user turn
+    api_messages = [{"role": "system", "content": format_system_prompt}]
     for msg in messages:
         if isinstance(msg, HumanMessage):
             api_messages.append({"role": "user", "content": str(msg.content)})
         elif isinstance(msg, AIMessage):
             api_messages.append({"role": "assistant", "content": str(msg.content)})
 
-    # Append tool result as a system-level context injection
+    # Append tool result as a user turn with a very explicit formatting instruction
     api_messages.append({
         "role": "user",
         "content": (
-            f"[Tool result from {tool_name}]: {tool_output}\n\n"
-            "Please give me a concise, voice-friendly response based on this information. "
-            "CRITICAL: Do NOT output any JSON, tool calls, or commands. Speak the final answer directly in plain English."
+            f"The {tool_name} tool returned this result:\n\n{tool_output}\n\n"
+            "Based ONLY on that result, give me one or two plain English sentences "
+            "as a spoken voice reply. "
+            "Do NOT output JSON, curly braces, code blocks, or tool calls. "
+            "Start your reply directly with a word like 'The', 'According to', 'Based on', etc."
         ),
     })
 
@@ -505,18 +527,32 @@ async def format_tool_response(state: AgentState) -> dict[str, Any]:
             model=settings.cerebras_model,
             messages=api_messages,
             max_tokens=256,
-            temperature=0.7,
+            temperature=0.3,   # lower → less hallucination of JSON/tool calls
         )
-        response_text = completion.choices[0].message.content.strip()
-        
+        response_text = (completion.choices[0].message.content or "").strip()
+
         input_tokens = completion.usage.prompt_tokens if hasattr(completion, 'usage') and completion.usage else 0
         output_tokens = completion.usage.completion_tokens if hasattr(completion, 'usage') and completion.usage else 0
-        
-        # Clean up any hallucinated JSON tool call prefixed to the response
+
+        # ── Robust JSON / code-block cleanup ─────────────────────────────────
         import re
-        response_text = re.sub(r'^\{.*?\}\s*', '', response_text).strip()
-        response_text = re.sub(r'^```json.*?```\s*', '', response_text, flags=re.DOTALL).strip()
-        
+        # 1. Remove complete JSON objects at the start (with or without trailing text)
+        response_text = re.sub(r'^\{.*?\}\s*', '', response_text, flags=re.DOTALL).strip()
+        # 2. Remove INCOMPLETE JSON at the start (truncated by max_tokens — no closing })
+        if response_text.startswith('{'):
+            response_text = re.sub(r'^\{[^}]*', '', response_text).strip()
+        # 3. Remove markdown code fences
+        response_text = re.sub(r'^```(?:json)?\s*.*?```\s*', '', response_text, flags=re.DOTALL).strip()
+        # 4. If still empty or clearly JSON-like after cleanup, use a graceful fallback
+        if not response_text or response_text.startswith(('{', '[', '`')):
+            logger.warning(
+                f"[format_tool_response] LLM returned unparseable output; "
+                f"falling back to tool output summary."
+            )
+            # Trim the raw tool output to a voice-friendly length
+            fallback = tool_output[:300].strip()
+            response_text = f"Here's what I found: {fallback}"
+
         logger.info(f"[format_tool_response] Cleaned Response: '{response_text[:80]}'")
 
     except Exception as exc:
