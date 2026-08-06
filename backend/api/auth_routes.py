@@ -118,6 +118,55 @@ async def update_users_me(user_update: UserUpdate, current_user: UserInDB = Depe
     )
 
 
+# ── Voice selection ────────────────────────────────────────────────────────────
+from backend.config import VOICE_NAME_TO_ID, VOICE_ID_TO_NAME  # noqa: E402
+
+class VoiceUpdate(BaseModel):
+    voice_name: str  # one of the keys in VOICE_NAME_TO_ID (e.g. "skylar", "daniel")
+
+@router.put("/voice", summary="Update the TTS voice for the current user")
+async def update_voice(
+    voice_update: VoiceUpdate,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """
+    Persist the user's preferred Cartesia voice to MongoDB.
+
+    Body:
+        voice_name: str — one of: skylar, rachel, lauren, caroline, morgan, daniel
+
+    The voice_id UUID is resolved server-side from the canonical VOICE_NAME_TO_ID
+    mapping so the frontend never needs to know raw UUIDs.
+
+    Returns:
+        { saved: true, voice_name: str, voice_id: str }
+
+    Raises:
+        400 if voice_name is not a recognised voice.
+        500 if the database is unavailable.
+    """
+    name = voice_update.voice_name.strip().lower()
+    if name not in VOICE_NAME_TO_ID:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown voice '{name}'. Valid options: {', '.join(VOICE_NAME_TO_ID.keys())}"
+        )
+
+    uuid = VOICE_NAME_TO_ID[name]
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    await db.voice_agent_db.users.update_one(
+        {"email": current_user.email},
+        {"$set": {"voice_id": uuid}},
+    )
+
+    return {"saved": True, "voice_name": name, "voice_id": uuid}
+
+
+
 @router.get("/conversations", summary="Get user conversation history")
 async def get_conversations(
     session_id: str | None = None,

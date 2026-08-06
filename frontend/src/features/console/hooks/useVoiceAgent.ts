@@ -55,6 +55,8 @@ export function useVoiceAgent({
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectToastIdRef = useRef<string | number | null>(null);
   const isReconnectingRef = useRef<boolean>(false);  // true while LiveKit is mid-reconnect
+  // Tracks every <audio> element we append to the DOM so we can remove them all on cleanup
+  const audioElementsRef = useRef<HTMLAudioElement[]>([]);
 
   // ── Cleanup helpers ──────────────────────────────────────────────────────────
   const clearWarmupTimer = useCallback(() => {
@@ -65,6 +67,8 @@ export function useVoiceAgent({
   }, []);
 
   const startDurationTimer = useCallback(() => {
+    // Guard: don't start a second interval if one is already running
+    if (durationTimerRef.current) return;
     durationTimerRef.current = setInterval(() => {
       incrementDuration();
     }, 1000);
@@ -77,6 +81,16 @@ export function useVoiceAgent({
     }
     resetDuration();
   }, [resetDuration]);
+
+  // Remove every <audio> element we previously injected into the DOM
+  const removeAudioElements = useCallback(() => {
+    audioElementsRef.current.forEach((el) => {
+      el.pause();
+      el.srcObject = null;
+      el.remove();
+    });
+    audioElementsRef.current = [];
+  }, []);
 
   // ── Connect ──────────────────────────────────────────────────────────────────
   const connect = useCallback(async () => {
@@ -147,15 +161,21 @@ export function useVoiceAgent({
           _participant: RemoteParticipant
         ) => {
           if (track.kind === Track.Kind.Audio) {
+            // Guard: if we're already CONNECTED this event fired a second time
+            // (e.g. track replaced). Remove existing audio elements first to
+            // prevent two voices playing simultaneously.
+            removeAudioElements();
+
             clearWarmupTimer();
             setAgentState('CONNECTED');
             setSpeakingState('QUIET');
             startDurationTimer();
             toasts.connected();
             onAudioTrack?.(track);
-            
-            // Attach the track to a new audio element and append it to the DOM to play sound
-            const element = track.attach();
+
+            // Attach the track to an audio element, track it, and append to DOM
+            const element = track.attach() as HTMLAudioElement;
+            audioElementsRef.current.push(element);
             document.body.appendChild(element);
           }
         }
@@ -244,8 +264,9 @@ export function useVoiceAgent({
       room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) {
           setSpeakingState('QUIET');
-          // Detach and remove audio elements
+          // Detach LiveKit-managed elements and remove all our tracked elements
           track.detach().forEach((el) => el.remove());
+          removeAudioElements();
         }
       });
 
@@ -326,6 +347,7 @@ export function useVoiceAgent({
   const disconnect = useCallback(async () => {
     clearWarmupTimer();
     stopDurationTimer();
+    removeAudioElements(); // Remove all injected <audio> elements before disconnecting
 
     toasts.dismiss(); // Clear any persisting error toasts
 
@@ -339,7 +361,7 @@ export function useVoiceAgent({
     setPipelineStage('IDLE');
     setError(null);
     toasts.disconnected();
-  }, [clearWarmupTimer, stopDurationTimer, setAgentState, setSpeakingState, setPipelineStage, setError]);
+  }, [clearWarmupTimer, stopDurationTimer, removeAudioElements, setAgentState, setSpeakingState, setPipelineStage, setError]);
 
   // ── Mute toggle ──────────────────────────────────────────────────────────────
   const toggleMute = useCallback(async () => {
@@ -363,13 +385,14 @@ export function useVoiceAgent({
     return () => {
       clearWarmupTimer();
       stopDurationTimer();
+      removeAudioElements(); // Ensure no <audio> elements linger after unmount
       // Set to IDLE to prevent the Disconnected event from thinking it was an error
       setAgentState('IDLE');
       setPipelineStage('IDLE');
       roomRef.current?.disconnect();
       toasts.dismiss();
     };
-  }, [clearWarmupTimer, stopDurationTimer, setAgentState, setPipelineStage]);
+  }, [clearWarmupTimer, stopDurationTimer, removeAudioElements, setAgentState, setPipelineStage]);
 
   return {
     room: roomRef.current,

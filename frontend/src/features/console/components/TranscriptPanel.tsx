@@ -4,22 +4,10 @@ import { Copy, Trash2, History } from 'lucide-react';
 import { useSessionStore } from '../../../store/useSessionStore';
 import { toasts } from '../../../lib/toast';
 import type { SpeakingState } from '../../../types/agent';
+import { formatTimeISTWithSeconds } from '../../../lib/dateUtils';
 
 interface TranscriptPanelProps {
   speakingState: SpeakingState;
-}
-
-function formatTime(isoString: string) {
-  try {
-    return new Date(isoString).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-  } catch {
-    return '';
-  }
 }
 
 // ── URL-aware text renderer ────────────────────────────────────────────────────
@@ -119,7 +107,7 @@ function TranscriptBubble({ role, text, timestamp, isTyping, isHistorical }: Bub
           fontSize: '0.62rem',
           color: '#2d3748',
         }}>
-          {formatTime(timestamp)}
+          {formatTimeISTWithSeconds(timestamp)}
         </span>
       </div>
 
@@ -192,7 +180,7 @@ export function TranscriptPanel({ speakingState }: TranscriptPanelProps) {
 
   const handleCopy = async () => {
     const text = transcripts
-      .map((t) => `[${formatTime(t.timestamp)}] ${t.role === 'user' ? 'You' : 'Agent'}: ${t.text}`)
+      .map((t) => `[${formatTimeISTWithSeconds(t.timestamp)}] ${t.role === 'user' ? 'You' : 'Agent'}: ${t.text}`)
       .join('\n');
     await navigator.clipboard.writeText(text);
     toasts.copied();

@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSessions, getConversations, deleteSession, continueSession, stopActivePipeline } from '../auth/api/authApi';
 import { useSessionStore } from '../../store/useSessionStore';
 import type { Session, ConversationTurn } from '../../types/auth';
+import { relativeDateIST, formatTimeISTWithSeconds } from '../../lib/dateUtils';
 
 // ── URL-aware text renderer ────────────────────────────────────────────────────
 const URL_REGEX = /(https?:\/\/[^\s,\)\]>"']+)/g;
@@ -44,32 +45,23 @@ function renderTextWithLinks(text: string, linkColor: string): React.ReactNode[]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 /**
- * Display a relative date label for a session.
+ * Display a relative date label for a session in IST.
  * Prefers ISO timestamp for accurate local-time math; falls back to date string.
  */
 function relativeDate(session: Session): string {
   // Prefer precise ISO timestamp; fallback to date-only string (midnight UTC)
   const raw = session.timestamp || session.date;
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return session.date; // guard against malformed values
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
-  if (diffDays === 0) return `Today ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return relativeDateIST(raw);
 }
 
 /**
- * Format a conversation turn's time in the user's local timezone.
+ * Format a conversation turn's time in IST.
  * Uses the ISO timestamp when present; falls back to the raw UTC "HH:MM:SS" string.
  */
 function formatTurnTime(turn: ConversationTurn): string {
   if (turn.timestamp) {
-    const d = new Date(turn.timestamp);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    }
+    const result = formatTimeISTWithSeconds(turn.timestamp);
+    if (result) return result;
   }
   // Legacy fallback — raw UTC string displayed as-is
   return turn.Time;

@@ -92,3 +92,19 @@ def get_settings() -> Settings:
 def get_settings_uncached() -> Settings:
     """Create a fresh Settings instance (bypasses lru_cache — used in tests)."""
     return Settings()
+
+
+# ── Voice name ↔ Cartesia UUID mapping ───────────────────────────────────────
+# These are the canonical voice options shown in the frontend Settings → Audio tab.
+# Keys are the lowercase UI names; values are Cartesia voice UUIDs.
+VOICE_NAME_TO_ID: dict[str, str] = {
+    "skylar":   "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4",
+    "rachel":   "10bd4af4-825b-49b8-b8bd-0ca11865536e",
+    "lauren":   "a33f7a4c-100f-41cf-a1fd-5822e8fc253f",
+    "caroline": "f9836c6e-a0bd-460e-9d3c-f7299fa60f94",
+    "morgan":   "0ee8beaa-db49-4024-940d-c7ea09b590b3",
+    "daniel":   "47c38ca4-5f35-497b-b1a3-415245fb35e1",
+}
+
+# Reverse lookup: UUID → display name (used to hydrate the UI on login)
+VOICE_ID_TO_NAME: dict[str, str] = {v: k for k, v in VOICE_NAME_TO_ID.items()}

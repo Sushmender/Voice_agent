@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatTimeISTWithSeconds } from '../../../lib/dateUtils';
 import {
   Loader2,
   CheckCircle2,
@@ -58,8 +59,7 @@ function TimelineItem({ event, index }: { event: ToolEvent; index: number }) {
       ? 'var(--status-connected)'
       : 'var(--status-error)';
 
-  const ts = new Date(event.timestamp);
-  const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const timeStr = formatTimeISTWithSeconds(event.timestamp);
 
   return (
     <motion.div

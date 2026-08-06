@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGetSessions } from '../../auth/hooks/useAuth';
 import { LoadingSkeleton } from '../../../components/shared/LoadingSkeleton';
 import type { Session } from '../../../types/auth';
+import { todayInIST, yesterdayInIST } from '../../../lib/dateUtils';
 
 interface SessionsSidebarProps {
   activeSessionId?: string;
@@ -12,8 +13,8 @@ interface SessionsSidebarProps {
 }
 
 function groupSessionsByDate(sessions: Session[]) {
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const today = todayInIST();       // "YYYY-MM-DD" in IST
+  const yesterday = yesterdayInIST(); // "YYYY-MM-DD" in IST
 
   const groups: { label: string; sessions: Session[] }[] = [
     { label: 'Today', sessions: [] },

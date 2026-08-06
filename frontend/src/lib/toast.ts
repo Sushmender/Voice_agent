@@ -96,5 +96,26 @@ export const toasts = {
       duration: 2000,
     }),
 
+  voiceChanged: (voiceName: string) =>
+    toast.info(`Voice set to ${voiceName}`, {
+      description: 'Takes effect on your next session.',
+      style: { ...baseStyle, borderLeft: '3px solid #6366f1' },
+      duration: 4000,
+    }),
+
+  error: (msg: string, description?: string) =>
+    toast.error(msg, {
+      description,
+      style: { ...baseStyle, borderLeft: '3px solid #ef4444' },
+      duration: 4000,
+    }),
+
+  success: (msg: string, description?: string) =>
+    toast.success(msg, {
+      description,
+      style: { ...baseStyle, borderLeft: '3px solid #22c55e' },
+      duration: 3000,
+    }),
+
   dismiss: toast.dismiss,
 };

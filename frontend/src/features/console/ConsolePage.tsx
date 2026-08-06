@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronDown, Clock, Keyboard, Settings, Cpu } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getConversations } from '../auth/api/authApi';
+import api from '../../lib/axios';
+import { toasts } from '../../lib/toast';
 
 import { SessionsSidebar } from './components/SessionsSidebar';
 import { OrbVisualizer } from './components/OrbVisualizer';
@@ -38,11 +40,12 @@ function formatDuration(seconds: number) {
 }
 
 const VOICE_OPTIONS = [
-  { id: 'aria',  label: 'Aria' },
-  { id: 'nova',  label: 'Nova' },
-  { id: 'echo',  label: 'Echo' },
-  { id: 'sage',  label: 'Sage' },
-  { id: 'orion', label: 'Orion' },
+  { id: 'skylar',   label: 'Skylar'   },
+  { id: 'rachel',   label: 'Rachel'   },
+  { id: 'lauren',   label: 'Lauren'   },
+  { id: 'caroline', label: 'Caroline' },
+  { id: 'morgan',   label: 'Morgan'   },
+  { id: 'daniel',   label: 'Daniel'   },
 ];
 
 // ── Background layers (stars + nebulas) ───────────────────────────────────────
@@ -345,7 +348,19 @@ export function ConsolePage() {
               <select
                 id="voice-selector"
                 value={selectedVoiceId}
-                onChange={(e) => setVoiceId(e.target.value)}
+                onChange={async (e) => {
+                  const newVoice = e.target.value;
+                  const previous = selectedVoiceId;
+                  setVoiceId(newVoice); // optimistic
+                  try {
+                    await api.put('/auth/voice', { voice_name: newVoice });
+                    const label = VOICE_OPTIONS.find((v) => v.id === newVoice)?.label ?? newVoice;
+                    toasts.voiceChanged(label);
+                  } catch {
+                    setVoiceId(previous); // rollback
+                    toasts.error('Failed to update voice. Please try again.');
+                  }
+                }}
                 aria-label="Select agent voice"
                 style={{
                   appearance: 'none',

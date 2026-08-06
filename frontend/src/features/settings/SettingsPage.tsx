@@ -5,7 +5,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { useUpdateNameMutation } from '../auth/hooks/useAuth';
-import { toast } from '../../lib/toast';
+import { toast, toasts } from '../../lib/toast';
 import api from '../../lib/axios';
 
 type Tab = 'profile' | 'audio' | 'agent' | 'account';
@@ -18,12 +18,23 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 const VOICES = [
-  { id: 'aria',  label: 'Aria',  sub: 'Warm · Conversational' },
-  { id: 'nova',  label: 'Nova',  sub: 'Clear · Professional'  },
-  { id: 'echo',  label: 'Echo',  sub: 'Deep · Authoritative'  },
-  { id: 'sage',  label: 'Sage',  sub: 'Calm · Thoughtful'     },
-  { id: 'orion', label: 'Orion', sub: 'Crisp · Energetic'     },
+  { id: 'skylar',   label: 'Skylar',   sub: 'Warm · Conversational' },
+  { id: 'rachel',   label: 'Rachel',   sub: 'Clear · Professional'  },
+  { id: 'lauren',   label: 'Lauren',   sub: 'Bright · Friendly'     },
+  { id: 'caroline', label: 'Caroline', sub: 'Calm · Thoughtful'     },
+  { id: 'morgan',   label: 'Morgan',   sub: 'Deep · Authoritative'  },
+  { id: 'daniel',   label: 'Daniel',   sub: 'Crisp · Energetic'     },
 ];
+
+// UUID → voice name reverse-lookup (mirrors backend VOICE_ID_TO_NAME)
+const UUID_TO_VOICE_NAME: Record<string, string> = {
+  'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4': 'skylar',
+  '10bd4af4-825b-49b8-b8bd-0ca11865536e': 'rachel',
+  'a33f7a4c-100f-41cf-a1fd-5822e8fc253f': 'lauren',
+  'f9836c6e-a0bd-460e-9d3c-f7299fa60f94': 'caroline',
+  '0ee8beaa-db49-4024-940d-c7ea09b590b3': 'morgan',
+  '47c38ca4-5f35-497b-b1a3-415245fb35e1': 'daniel',
+};
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -187,7 +198,42 @@ function ProfileTab() {
 
 // ── Audio tab ──────────────────────────────────────────────────────────────────
 function AudioTab() {
+  const user = useAppStore((s) => s.user);
   const { selectedVoiceId, setVoiceId } = useSettingsStore();
+  const [saving, setSaving] = useState(false);
+
+  // On mount: sync the UI selection from the DB voice_id UUID so it reflects
+  // whatever is actually stored, even if localStorage is stale or was cleared.
+  useEffect(() => {
+    if (user?.voice_id) {
+      const name = UUID_TO_VOICE_NAME[user.voice_id];
+      if (name && name !== selectedVoiceId) {
+        setVoiceId(name);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.voice_id]);
+
+  async function handleVoiceSelect(voiceId: string) {
+    if (voiceId === selectedVoiceId || saving) return;
+
+    const previous = selectedVoiceId;
+    // Optimistic update — move highlight immediately
+    setVoiceId(voiceId);
+    setSaving(true);
+
+    try {
+      await api.put('/auth/voice', { voice_name: voiceId });
+      const label = VOICES.find((v) => v.id === voiceId)?.label ?? voiceId;
+      toasts.voiceChanged(label);
+    } catch {
+      // Rollback on failure
+      setVoiceId(previous);
+      toasts.error('Failed to update voice. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '480px' }}>
@@ -201,14 +247,15 @@ function AudioTab() {
           fontSize: '0.8rem',
           color: 'var(--text-muted)',
         }}>
-          Cartesia voice used for the AI assistant.
+          Choose the voice for your AI assistant. Changes take effect on your next session.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {VOICES.map((v) => (
             <button
               key={v.id}
-              onClick={() => setVoiceId(v.id)}
+              onClick={() => handleVoiceSelect(v.id)}
               aria-pressed={selectedVoiceId === v.id}
+              disabled={saving}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -217,9 +264,10 @@ function AudioTab() {
                 background: selectedVoiceId === v.id ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.02)',
                 border: `1px solid ${selectedVoiceId === v.id ? 'rgba(99,102,241,0.35)' : 'var(--border-subtle)'}`,
                 borderRadius: '10px',
-                cursor: 'pointer',
+                cursor: saving ? 'not-allowed' : 'pointer',
                 textAlign: 'left',
                 transition: 'all 150ms',
+                opacity: saving && selectedVoiceId !== v.id ? 0.6 : 1,
               }}
             >
               <div>
@@ -246,8 +294,9 @@ function AudioTab() {
                   width: '8px',
                   height: '8px',
                   borderRadius: '50%',
-                  background: 'var(--accent-indigo)',
-                  boxShadow: '0 0 8px var(--accent-indigo)',
+                  background: saving ? 'var(--text-muted)' : 'var(--accent-indigo)',
+                  boxShadow: saving ? 'none' : '0 0 8px var(--accent-indigo)',
+                  transition: 'background 200ms, box-shadow 200ms',
                 }} />
               )}
             </button>

@@ -15,10 +15,11 @@ import { useAppStore } from '../../store/useAppStore';
 import { useQuery } from '@tanstack/react-query';
 import { getSessions } from '../auth/api/authApi';
 import type { Session } from '../../types/auth';
+import { getISTHour, relativeDateIST } from '../../lib/dateUtils';
 
-// ── Greeting helper ────────────────────────────────────────────────────────────
+// ── Greeting helper ──────────────────────────────────────────────────────────────────
 function greeting(name: string): string {
-  const hour = new Date().getHours();
+  const hour = getISTHour(); // Always use IST hour
   if (hour < 12) return `Good morning, ${name} 👋`;
   if (hour < 17) return `Good afternoon, ${name} 👋`;
   return `Good evening, ${name} 👋`;
@@ -32,16 +33,9 @@ function formatDuration(secs: number): string {
   return `${m}m ${s}s`;
 }
 
-// ── Relative date ──────────────────────────────────────────────────────────────
+// ── Relative date (IST) ──────────────────────────────────────────────────────
 function relativeDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays === 0) return `Today, ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return relativeDateIST(dateStr);
 }
 
 // ── Skeleton loader ────────────────────────────────────────────────────────────
