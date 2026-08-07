@@ -1,8 +1,8 @@
 """
-tests/test_config.py
----------------------
-Test: validate configuration loading and token generation.
-Run: pytest tests/test_config.py -v
+tests/test_settings.py
+-----------------------
+Test Suite — Configuration & FastAPI App Endpoints.
+Run: pytest tests/test_settings.py -v
 """
 import os
 import pytest

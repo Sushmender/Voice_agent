@@ -82,6 +82,12 @@ This is the centerpiece of the application, located in the middle panel.
    - **Action:** While the agent is actively speaking (violet orb), try talking over it.
    - **What to expect:** The visualizer should immediately detect your voice and snap back to the blue "Listening" state.
 
+### D. Testing Developer Mode (Latency Tracking)
+1. **Enable Dev Mode:** Navigate to the `Settings` page (gear icon in sidebar). Toggle "Developer Mode" to ON.
+2. **Observe DevModeHUD:** Go back to the `Console`. You will see a new dark semi-transparent panel in the bottom left corner labeled "DEV ACTIVE".
+3. **Trigger a turn:** Speak to the agent and wait for a reply. Once the turn completes, the DevModeHUD will instantly update to show the milliseconds spent in ASR, LLM, and TTS for that specific turn.
+4. **View Historical Latency:** Navigate to the `Tools` page to see the `LatencyPanel`, which renders a comprehensive bar chart of all completed turns and highlights the P95/Avg latencies.
+
 ---
 
 ## 3. Stopping the Services

@@ -10,8 +10,9 @@ src/
 │   ├── auth.ts          # Login, Signup, Me
 │   └── voice.ts         # Token generation endpoint
 ├── components/          # Reusable UI components
-│   ├── auth/            # Login/Signup forms
+│   ├── auth/            # Login/Signup forms, Warmup view
 │   ├── voice/           # Voice agent specific UI (Visualizer, Controls)
+│   ├── latency/         # Developer HUDs & Latency metrics panels
 │   ├── layout/          # Page wrappers, Navigation
 │   └── ui/              # Base design system components (Buttons, Inputs)
 ├── hooks/               # Custom React hooks
@@ -22,6 +23,7 @@ src/
 ├── pages/               # Route components (or app/ in Next.js)
 │   ├── index.tsx        # Landing / Dashboard
 │   ├── login.tsx
+│   ├── warmup.tsx       # Post-login pipeline warmup
 │   └── room.tsx         # Active voice session view
 ├── utils/               # Helpers, formatters, error handling
 └── styles/              # Global CSS, Design System variables
@@ -46,9 +48,10 @@ Components are strictly responsible for rendering based on state and capturing u
 
 ## 3. Data Flow
 
-1. **Authentication:** User enters credentials -> `AuthForm` calls `authApi.login()` -> API returns JWT -> Saved to local storage -> Global Auth State updates -> UI routes to `/room`.
-2. **Session Start:** User clicks "Connect to Agent" -> `useVoiceAgent` calls `voiceApi.getToken()` -> API returns LiveKit token -> Hook initializes LiveKit Room -> Room connects.
-3. **Session Active:** Agent speaks -> LiveKit fires `TrackSubscribed` -> Hook attaches audio track -> UI transitions to `CONNECTED` state. Transcripts arrive via Data Channels -> Hook parses JSON -> Appends to transcript array -> React re-renders `TranscriptBox`.
+1. **Authentication:** User enters credentials -> `AuthForm` calls `authApi.login()` -> API returns JWT -> Saved to local storage -> Global Auth State updates.
+2. **Warmup Phase:** User routed to `/warming-up` -> Frontend polls `authApi.getWarmupStatus()` -> Backend pre-warms AI pipeline components (LLM, TTS). Once done, user routed to Dashboard/Room.
+3. **Session Start:** User clicks "Connect to Agent" -> `useVoiceAgent` calls `voiceApi.getToken()` -> API returns LiveKit token -> Hook initializes LiveKit Room -> Room connects.
+4. **Session Active:** Agent speaks -> LiveKit fires `TrackSubscribed` -> Hook attaches audio track -> UI transitions to `CONNECTED` state. Transcripts arrive via Data Channels -> Hook parses JSON -> Appends to transcript array -> React re-renders `TranscriptBox` and `DevModeHUD` tracks latency metrics.
 
 ## 4. Protected Routes
 Implement a Higher-Order Component (HOC) or route guard that checks the global auth state. If a user attempts to access `/room` without a valid JWT token, redirect them to `/login`.

@@ -1,9 +1,9 @@
 """
-tests/test_pipeline.py
------------------------
-Automated Test Suite
+tests/test_voice_pipeline.py
+-----------------------------
+Test Suite — Voice Pipeline
 ============================
-Covers every checklist item from tasks.md that can be verified
+Covers pipeline components that can be verified
 without a running LiveKit room or real API calls.
 
 Test categories
@@ -14,10 +14,10 @@ Test categories
 4. VAD configuration      — verify Silero VAD is wired and tuned
 5. Pipeline structure     — verify LatencyLogger appears in the chain
 6. Latency summary        — verify summary table output
-7. Milestone        — end-to-end stub confirming all stages fire
+7. Milestone              — end-to-end stub confirming all stages fire
 
 Run:
-    pytest tests/test_pipeline.py -v
+    pytest tests/test_voice_pipeline.py -v
 """
 
 import asyncio
@@ -42,9 +42,10 @@ class TestLatencyLoggerProcessor:
 
     @staticmethod
     def _make_processor():
-        """Return a LatencyLoggerProcessor with push_frame stubbed out."""
-        from backend.pipeline.latency_logger import LatencyLoggerProcessor
-        proc = LatencyLoggerProcessor()
+        """Return a (LatencyLoggerProcessor, SharedLatencyState) pair with push_frame stubbed."""
+        from backend.pipeline.latency_logger import LatencyLoggerProcessor, SharedLatencyState
+        shared = SharedLatencyState()
+        proc = LatencyLoggerProcessor(shared_state=shared)
 
         # Stub out push_frame so the processor can run standalone in tests
         async def _noop(frame, direction=None):
@@ -59,15 +60,15 @@ class TestLatencyLoggerProcessor:
 
     def test_initial_state(self):
         """Processor starts with no turns and no timestamps."""
-        from backend.pipeline.latency_logger import LatencyLoggerProcessor
-        p = LatencyLoggerProcessor()
-        assert p.turns == []
-        assert p.turn_count == 0
-        assert p._current_turn is None
-        assert p._speech_start_ts is None
-        assert p._llm_start_ts is None
-        assert p._asr_logged is False
-        assert p._first_audio_logged is False
+        from backend.pipeline.latency_logger import LatencyLoggerProcessor, SharedLatencyState
+        shared = SharedLatencyState()
+        p = LatencyLoggerProcessor(shared_state=shared)
+        assert shared.turns == []
+        assert shared.current_turn is None
+        assert shared.speech_start_ts is None
+        assert shared.llm_start_ts is None
+        assert shared.asr_logged is False
+        assert shared.first_audio_logged is False
 
     # ------------------------------------------------------------------
     # Turn tracking
@@ -82,11 +83,11 @@ class TestLatencyLoggerProcessor:
         proc = self._make_processor()
         await proc.process_frame(UserStartedSpeakingFrame(), FrameDirection.DOWNSTREAM)
 
-        assert proc._current_turn is not None
-        assert proc._current_turn.turn_number == 1
-        assert proc._speech_start_ts is not None
-        assert proc._asr_logged is False
-        assert proc._first_audio_logged is False
+        assert proc.shared.current_turn is not None
+        assert proc.shared.current_turn.turn_number == 1
+        assert proc.shared.speech_start_ts is not None
+        assert proc.shared.asr_logged is False
+        assert proc.shared.first_audio_logged is False
 
     @pytest.mark.asyncio
     async def test_turn_number_increments(self):
@@ -101,11 +102,11 @@ class TestLatencyLoggerProcessor:
 
         for expected_turn in range(1, 4):
             await proc.process_frame(UserStartedSpeakingFrame(), FrameDirection.DOWNSTREAM)
-            assert proc._current_turn.turn_number == expected_turn
+            assert proc.shared.current_turn.turn_number == expected_turn
             # Complete the turn so next UserStartedSpeaking starts a fresh one
             await proc.process_frame(TTSStoppedFrame(), FrameDirection.DOWNSTREAM)
 
-        assert proc.turn_count == 3
+        assert len(proc.shared.turns) == 3
 
     # ------------------------------------------------------------------
     # ASR timing
@@ -129,9 +130,9 @@ class TestLatencyLoggerProcessor:
         )
         await proc.process_frame(transcript, FrameDirection.DOWNSTREAM)
 
-        assert proc._current_turn is not None
-        assert proc._current_turn.asr_ms is not None
-        assert proc._current_turn.asr_ms >= 40   # at least 40 ms
+        assert proc.shared.current_turn is not None
+        assert proc.shared.current_turn.asr_ms is not None
+        assert proc.shared.current_turn.asr_ms >= 40   # at least 40 ms
 
     @pytest.mark.asyncio
     async def test_asr_logged_only_once_per_turn(self):
@@ -145,7 +146,7 @@ class TestLatencyLoggerProcessor:
 
         frame1 = TranscriptionFrame(text="first", user_id="u", timestamp="")
         await proc.process_frame(frame1, FrameDirection.DOWNSTREAM)
-        first_asr = proc._current_turn.asr_ms
+        first_asr = proc.shared.current_turn.asr_ms
 
         await asyncio.sleep(0.02)
 
@@ -153,7 +154,7 @@ class TestLatencyLoggerProcessor:
         await proc.process_frame(frame2, FrameDirection.DOWNSTREAM)
 
         # asr_ms must not have changed after the second transcript
-        assert proc._current_turn.asr_ms == first_asr
+        assert proc.shared.current_turn.asr_ms == first_asr
 
     @pytest.mark.asyncio
     async def test_empty_transcript_ignored(self):
@@ -167,7 +168,7 @@ class TestLatencyLoggerProcessor:
         blank = TranscriptionFrame(text="  ", user_id="u", timestamp="")
         await proc.process_frame(blank, FrameDirection.DOWNSTREAM)
 
-        assert proc._current_turn.asr_ms is None   # blank must not trigger timing
+        assert proc.shared.current_turn.asr_ms is None   # blank must not trigger timing
 
     # ------------------------------------------------------------------
     # LLM + TTS timing
@@ -186,7 +187,7 @@ class TestLatencyLoggerProcessor:
         await proc.process_frame(UserStartedSpeakingFrame(), FrameDirection.DOWNSTREAM)
         await proc.process_frame(LLMFullResponseStartFrame(), FrameDirection.DOWNSTREAM)
 
-        assert proc._llm_start_ts is not None
+        assert proc.shared.llm_start_ts is not None
 
     @pytest.mark.asyncio
     async def test_audio_frame_records_tts_and_total_ms(self):
@@ -207,11 +208,11 @@ class TestLatencyLoggerProcessor:
         audio = AudioRawFrame(audio=b"\x00" * 320, sample_rate=16000, num_channels=1)
         await proc.process_frame(audio, FrameDirection.DOWNSTREAM)
 
-        assert proc._current_turn is not None
-        assert proc._current_turn.tts_ms  is not None
-        assert proc._current_turn.total_ms is not None
-        assert proc._current_turn.tts_ms  >= 40     # at least 40 ms
-        assert proc._current_turn.total_ms >= 70     # at least 70 ms (30 + 50)
+        assert proc.shared.current_turn is not None
+        assert proc.shared.current_turn.tts_ms  is not None
+        assert proc.shared.current_turn.total_ms is not None
+        assert proc.shared.current_turn.tts_ms  >= 40     # at least 40 ms
+        assert proc.shared.current_turn.total_ms >= 70     # at least 70 ms (30 + 50)
 
     @pytest.mark.asyncio
     async def test_audio_logged_only_once_per_turn(self):
@@ -229,12 +230,12 @@ class TestLatencyLoggerProcessor:
 
         audio = AudioRawFrame(audio=b"\x00" * 320, sample_rate=16000, num_channels=1)
         await proc.process_frame(audio, FrameDirection.DOWNSTREAM)
-        first_tts = proc._current_turn.tts_ms
+        first_tts = proc.shared.current_turn.tts_ms
 
         await asyncio.sleep(0.02)
         await proc.process_frame(audio, FrameDirection.DOWNSTREAM)
 
-        assert proc._current_turn.tts_ms == first_tts  # must not change
+        assert proc.shared.current_turn.tts_ms == first_tts  # must not change
 
     # ------------------------------------------------------------------
     # Turn completion
@@ -250,13 +251,13 @@ class TestLatencyLoggerProcessor:
         from pipecat.processors.frame_processor import FrameDirection
 
         proc = self._make_processor()
-        assert proc.turn_count == 0
+        assert len(proc.shared.turns) == 0
 
         await proc.process_frame(UserStartedSpeakingFrame(), FrameDirection.DOWNSTREAM)
         await proc.process_frame(TTSStoppedFrame(), FrameDirection.DOWNSTREAM)
 
-        assert proc.turn_count == 1
-        assert proc.turns[0].turn_number == 1
+        assert len(proc.shared.turns) == 1
+        assert proc.shared.turns[0].turn_number == 1
 
     @pytest.mark.asyncio
     async def test_turns_not_duplicated(self):
@@ -272,7 +273,7 @@ class TestLatencyLoggerProcessor:
         await proc.process_frame(TTSStoppedFrame(), FrameDirection.DOWNSTREAM)
         await proc.process_frame(TTSStoppedFrame(), FrameDirection.DOWNSTREAM)
 
-        assert proc.turn_count == 1   # no duplicate
+        assert len(proc.shared.turns) == 1   # no duplicate
 
     # ------------------------------------------------------------------
     # Summary log
@@ -280,10 +281,11 @@ class TestLatencyLoggerProcessor:
 
     def test_log_summary_empty(self, caplog):
         """log_summary with no turns should not raise and should log a message."""
-        from backend.pipeline.latency_logger import LatencyLoggerProcessor
-        p = LatencyLoggerProcessor()
+        from backend.pipeline.latency_logger import LatencyLoggerProcessor, SharedLatencyState
+        shared = SharedLatencyState()
+        p = LatencyLoggerProcessor(shared_state=shared)
         with caplog.at_level(logging.INFO):
-            p.log_summary()   # must not raise
+            shared.log_summary()   # must not raise
         assert any("No completed turns" in r.message for r in caplog.records)
 
     @pytest.mark.asyncio
@@ -296,9 +298,10 @@ class TestLatencyLoggerProcessor:
             TTSStoppedFrame,
         )
         from pipecat.processors.frame_processor import FrameDirection
-        from backend.pipeline.latency_logger import LatencyLoggerProcessor
+        from backend.pipeline.latency_logger import LatencyLoggerProcessor, SharedLatencyState
 
-        proc = LatencyLoggerProcessor()
+        shared = SharedLatencyState()
+        proc = LatencyLoggerProcessor(shared_state=shared)
 
         async def _noop(frame, direction=None): pass
         proc.push_frame = _noop
@@ -310,7 +313,7 @@ class TestLatencyLoggerProcessor:
         await proc.process_frame(TTSStoppedFrame(), FrameDirection.DOWNSTREAM)
 
         with caplog.at_level(logging.INFO):
-            proc.log_summary()
+            shared.log_summary()
 
         log_text = "\n".join(r.message for r in caplog.records)
         assert "Turn" in log_text
@@ -536,9 +539,10 @@ class TestMilestone:
             TTSStoppedFrame,
         )
         from pipecat.processors.frame_processor import FrameDirection
-        from backend.pipeline.latency_logger import LatencyLoggerProcessor
+        from backend.pipeline.latency_logger import LatencyLoggerProcessor, SharedLatencyState
 
-        proc = LatencyLoggerProcessor()
+        shared = SharedLatencyState()
+        proc = LatencyLoggerProcessor(shared_state=shared)
 
         async def _noop(frame, direction=None): pass
         proc.push_frame = _noop
@@ -567,8 +571,8 @@ class TestMilestone:
         await proc.process_frame(TTSStoppedFrame(), FrameDirection.DOWNSTREAM)
 
         # Validate
-        assert proc.turn_count == 1
-        turn = proc.turns[0]
+        assert len(proc.shared.turns) == 1
+        turn = proc.shared.turns[0]
         assert turn.asr_ms   is not None, "ASR latency not captured"
         assert turn.tts_ms   is not None, "TTS latency not captured"
         assert turn.total_ms is not None, "Total latency not captured"

@@ -2,7 +2,31 @@
 
 This document outlines the sequential flow of events from the moment a user initiates a session to the point they disconnect. Understanding this flow is crucial for synchronizing the frontend UI state with the backend LiveKit pipeline.
 
-## 1. Complete Session Sequence Diagram
+## 1. Login & Pre-Warmup Phase
+
+Before a user can connect to the voice agent, the backend AI pipeline (ASR, LLM, TTS) must be loaded into memory. This occurs immediately after login:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Frontend UI
+    participant API as FastAPI Backend
+
+    User->>UI: Submit Login Credentials
+    UI->>API: POST /auth/login
+    API-->>UI: 200 OK (JWT)
+    
+    UI->>UI: Route to /warming-up
+    loop Every 600ms
+        UI->>API: GET /auth/warmup-status
+        API-->>UI: { done: false, step: "langgraph" }
+    end
+    
+    API-->>UI: { done: true, step: "done" }
+    UI->>UI: Route to /dashboard
+```
+
+## 2. Complete Session Sequence Diagram
 
 ```mermaid
 sequenceDiagram
@@ -59,7 +83,7 @@ sequenceDiagram
     Pipeline->>Pipeline: Graceful shutdown & Memory clear
 ```
 
-## 2. Key Synchronization Points
+## 3. Key Synchronization Points
 
 1. **The Warmup Gap:** There is a distinct gap between `Room.connect()` succeeding (Frontend hits LiveKit) and `TrackSubscribed` firing (Pipecat agent is fully booted and broadcasting). This takes 3-5 seconds. The frontend MUST handle this gracefully by showing a loading/warming up indicator.
 2. **The Greeting:** Do not attempt to play your own greeting sound on the frontend. The agent pipeline is hardcoded to say "Hi, I'm ready!" the exact millisecond its audio track is established.
@@ -67,7 +91,7 @@ sequenceDiagram
 
 ---
 
-## 3. Barge-In (Interruption) Sequence
+## 4. Barge-In (Interruption) Sequence
 
 The backend handles barge-in fully — no extra frontend API call required. The frontend only needs to react to the DataChannel events that naturally follow.
 
@@ -108,7 +132,7 @@ sequenceDiagram
     end
 ```
 
-## 4. What the Frontend MUST Do for Barge-In
+## 5. What the Frontend MUST Do for Barge-In
 
 | Requirement | Why |
 | :--- | :--- |

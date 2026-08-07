@@ -9,6 +9,7 @@ Robust error handling is critical for voice applications. This document outlines
 | **Invalid Login Credentials** | 401 Unauthorized | Display inline error on the Login form: "Incorrect email or password." Do not clear the email field. |
 | **Email Already Registered** | 400 Bad Request | Display inline error on the Signup form: "This email is already in use." |
 | **Expired/Invalid JWT** | 401 Unauthorized | Automatically clear local storage/state and redirect the user to `/login`. Do not show an error if it happens on initial load, but do show an error toast if it happens mid-session. |
+| **Warmup Polling Failure** | Any network error or 5xx | If `/auth/warmup-status` fails continually for 10 seconds, fallback gracefully and redirect to `/dashboard` to avoid trapping the user on the warmup screen. |
 
 ## 2. LiveKit & Connection Errors
 

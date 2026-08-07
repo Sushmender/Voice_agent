@@ -12,13 +12,6 @@ import uuid
 
 import pytest
 
-# ── Exclude test_env_keys.py from normal test runs ───────────────────────────
-# test_env_keys.py is a standalone connectivity script that makes live API calls
-# at module-level (not inside test functions). Including it in pytest auto-collection
-# causes INTERNALERRROR because Python imports it — triggering network requests —
-# before any monkeypatching or mocking can be applied.
-# Run it manually: python tests/test_env_keys.py
-collect_ignore = ["test_env_keys.py"]
 
 # ── Set test environment variables before any backend module is imported ──────
 # These are fake values that allow Settings() to validate without a real .env file.

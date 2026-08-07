@@ -60,6 +60,11 @@ export const AuthService = {
   async getMe(): Promise<UserProfile> {
     const response = await apiClient.get('/auth/me');
     return response.data;
+  },
+
+  async getWarmupStatus(): Promise<{ done: boolean; step: string; elapsed: number }> {
+    const response = await apiClient.get('/auth/warmup-status');
+    return response.data;
   }
 };
 ```

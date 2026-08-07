@@ -13,6 +13,14 @@ To ensure a modular and maintainable codebase, the frontend should be composed o
   - Routing to the main dashboard on success.
 - **State:** Local form state, Loading boolean.
 
+### `WarmupPage`
+- **Purpose:** Inform the user while the backend spins up AI models (post-login).
+- **Responsibilities:**
+  - Polls `/auth/warmup-status` every 600ms.
+  - Displays a visual progress bar and a list of steps (LangGraph, Groq, Cerebras).
+  - Automatically redirects to the Dashboard once warming is complete.
+  - Rotates "Did You Know?" facts to keep the user engaged.
+
 ## 2. Voice Agent Session Components
 
 ### `VoiceRoom` (Container Component)
@@ -53,6 +61,13 @@ To ensure a modular and maintainable codebase, the frontend should be composed o
   - "Connect" button (initiates token fetch and LiveKit connection).
   - "Disconnect" button (terminates LiveKit room).
   - Mute/Unmute microphone toggle.
+
+### `DevModeHUD` & `LatencyPanel`
+- **Purpose:** Display real-time and historical latency tracking for developers.
+- **Responsibilities:**
+  - `DevModeHUD`: Overlays a small HUD showing the latest turn's ASR, LLM, TTS, and total latency in milliseconds.
+  - `LatencyPanel`: Renders a full Recharts-based bar chart view of historical turn latency metrics, calculating average and P95 totals.
+  - Only visible when "Developer Mode" is enabled via Settings.
 
 ## 3. Base UI Components (Design System)
 

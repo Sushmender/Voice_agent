@@ -14,7 +14,6 @@ Run:
 """
 import asyncio
 import logging
-import pathlib
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -22,7 +21,6 @@ from datetime import timedelta
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.config import get_settings
@@ -400,15 +398,4 @@ async def get_agent_token(room_name: str = "voice-agent-room"):
         raise HTTPException(status_code=500, detail=f"Agent token generation failed: {str(e)}")
 
 
-# ── Test client (browser UI) ──────────────────────────────────────────────────
-_TEST_CLIENT_HTML = pathlib.Path(__file__).resolve().parent.parent / "test_client.html"
 
-@app.get("/test", include_in_schema=False)
-async def test_client():
-    """
-    Serve the voice-agent browser test client at http://localhost:8000/test
-    No OpenAI key needed — connects to your own LiveKit room via your API token.
-    """
-    if not _TEST_CLIENT_HTML.exists():
-        raise HTTPException(status_code=404, detail="test_client.html not found in project root")
-    return FileResponse(_TEST_CLIENT_HTML, media_type="text/html")

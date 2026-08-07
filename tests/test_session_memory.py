@@ -1,6 +1,6 @@
 """
-tests/test_memory.py
----------------------
+tests/test_session_memory.py
+-----------------------------
 Test Suite — Short-term Memory Module
 ============================================
 Covers every public function in backend/memory/short_term.py.
@@ -16,7 +16,7 @@ Test categories
 7. Edge cases           — empty content, repeated operations, unicode
 
 Run:
-    pytest tests/test_memory.py -v
+    pytest tests/test_session_memory.py -v
 """
 
 import os

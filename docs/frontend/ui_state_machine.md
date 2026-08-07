@@ -106,3 +106,15 @@ room.on(RoomEvent.DataReceived, (payload) => {
   }
 });
 ```
+
+## 5. Latency Tracking & Dev Mode
+
+To help debug and visualize backend pipeline performance, the frontend utilizes developer-facing HUDs that subscribe to specific `metrics` events over the DataChannel.
+
+- **DevModeHUD**: A live overlay in the corner of the `ConsolePage` that displays the ASR, LLM, TTS, and Total turn latency for the most recently completed conversational turn. It relies on the `devMode` boolean from `SettingsStore`.
+- **LatencyPanel**: Accessible via the `ToolsPage` or a dedicated panel, this renders historical turn metrics using Recharts. It plots exactly how much of a turn was spent in transcription, inference, or synthesis, helping isolate bottlenecks.
+
+**How it works:**
+1. While `THINKING` and `SPEAKING`, the backend calculates processing times.
+2. The backend sends `{ type: "metrics", data: { asr: 200, llm: 450, tts: 150, total: 800 } }` over the DataChannel.
+3. The frontend captures this, appends it to a `latencyHistory` array in the `SessionStore`, and instantly re-renders the `DevModeHUD` and `LatencyPanel`.

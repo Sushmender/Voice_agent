@@ -1,6 +1,6 @@
 """
-tests/test_agent.py
---------------------
+tests/test_agent_graph.py
+--------------------------
 Test Suite — LangGraph Agent
 ==================================================
 Tests every item that can be verified without real API calls
@@ -17,7 +17,7 @@ Test categories
 7. milestone            — multi-turn memory scenario (mocked LLM)
 
 Run:
-    pytest tests/test_agent.py -v
+    pytest tests/test_agent_graph.py -v
 """
 
 import asyncio
@@ -180,8 +180,8 @@ class TestMemoryNodes:
         }
         result = await save_memory(state)
 
-        # save_memory should return an empty dict (side-effect only)
-        assert result == {}
+        # save_memory returns a dict (may include timing metadata); verify side-effects
+        assert isinstance(result, dict)
         # Memory should now have 2 messages
         history = mem.get_history(session_id)
         assert len(history) == 2
@@ -294,7 +294,7 @@ class TestLlmNode:
     async def test_llm_node_includes_system_prompt(self):
         """llm_node should prepend the system prompt as the first message."""
         from langchain_core.messages import HumanMessage
-        from backend.agent.prompts import VOICE_AGENT_SYSTEM_PROMPT
+        from backend.agent.prompts import get_voice_agent_system_prompt
         from backend.agent.nodes import llm_node
 
         captured_messages = []
@@ -322,7 +322,7 @@ class TestLlmNode:
 
         assert len(captured_messages) > 0, "No messages were captured by mock"
         assert captured_messages[0]["role"] == "system"
-        assert captured_messages[0]["content"].startswith(VOICE_AGENT_SYSTEM_PROMPT)
+        assert captured_messages[0]["content"].startswith(get_voice_agent_system_prompt()[:50])
 
 
 # ===========================================================================

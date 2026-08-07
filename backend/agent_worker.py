@@ -19,7 +19,6 @@ Requires:
 import asyncio
 import logging
 import os
-import pathlib
 import sys
 
 import httpx
@@ -33,7 +32,6 @@ from livekit.agents import (
     WorkerOptions,
     WorkerType,
     cli,
-    metrics,
 )
 
 # ── Local imports ─────────────────────────────────────────────────────────────

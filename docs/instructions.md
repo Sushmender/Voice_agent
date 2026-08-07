@@ -29,11 +29,11 @@ This guide will walk you through running your Voice AI Agent and provide specifi
    - Scroll down to `POST /api/token`, click **Try it out**, and hit **Execute**.
    - Copy the `livekit_url` and the `token` string from the JSON response.
 
-4. **Connect to the Test Client**
-   - Open a new tab and go to: **[http://localhost:8000/test](http://localhost:8000/test)**
-   - Paste the `LiveKit URL` and `LiveKit Token` you copied from Swagger into the input boxes.
-   - Click **Connect to Agent**.
-   - Wait 3-5 seconds for the agent to connect. Once it does, it will say "Hi, I'm ready!" and you can start talking.
+4. **Connect via the Frontend Application (Recommended)**
+   - The full React frontend handles token generation, agent warmup, and UI visualizations automatically.
+   - See [frontend_instructions.md](./frontend/frontend_instructions.md) for steps on starting the frontend.
+   - Open your browser and go to: **[http://localhost:5173](http://localhost:5173)**, sign up/login, and connect to the agent!
+   - *(Optional: You can still use the basic test client at `http://localhost:8000/test` by pasting the LiveKit URL and Token from Swagger).*
 
 5. **Verify Data in MongoDB**
    - Open your [MongoDB Atlas Dashboard](https://cloud.mongodb.com/).

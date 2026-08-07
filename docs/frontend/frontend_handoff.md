@@ -48,7 +48,8 @@ To implement the frontend successfully, please read the following documents in o
 ## 5. Important Backend Behaviors
 
 - **Automatic Pipeline Launch:** When the frontend requests a LiveKit token via `POST /api/token`, the backend automatically launches the Pipecat voice pipeline for that room. The frontend *does not* need to explicitly trigger the agent.
-- **Agent Warmup Time:** It takes approximately 3-5 seconds for the agent pipeline to pre-warm models and connect to LiveKit. The frontend must display a "Warming up" state during this period.
+- **Agent Warmup Time (Post-Login):** Immediately after login, the frontend routes to `/warming-up` and polls `GET /auth/warmup-status` to track the initial loading of models (LangGraph, Groq STT, Cerebras LLM) before letting the user into the Dashboard.
+- **LiveKit Connection Warmup:** Upon calling `room.connect()`, it still takes ~1 second for the audio track to establish. The frontend must display a "Warming up" UI state during this LiveKit phase.
 - **Audio Greeting:** The agent will automatically say "Hi, I'm ready!" exactly when it finishes connecting. The frontend must subscribe to the audio track to hear this.
 - **Transcripts & Tool Events:** Real-time transcripts and tool events are sent via LiveKit Data Channels, not via REST or WebSockets. See [`livekit_contract.md`](./livekit_contract.md) for the full event schema.
 - **Barge-In (Interruption) — Backend Fully Handles It:** The pipeline includes `InterruptionHandlerProcessor` and `BotSpeakingTracker` (commit `73ce0d7`). When a user speaks while the agent is talking:

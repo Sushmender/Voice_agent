@@ -1,32 +1,71 @@
-# React + TypeScript + Vite
+# Voice Agent - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This is the frontend application for the Voice Agent project. It provides a sleek, interactive, and responsive user interface for managing and conversing with the AI Voice Agent.
 
-Currently, two official plugins are available:
+## Screenshots
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### 1. Dashboard
+The main dashboard provides an overview of your agent's activity and status.
+![Dashboard View](C:\Users\susmi\.gemini\antigravity-ide\brain\fe74c149-4498-486d-9a81-bcbb7dce7721\dashboard_view_1786085565784.png)
 
-## React Compiler
+### 2. Voice Console
+The core interactive interface where you can speak with the Voice Agent in real-time, featuring audio visualizations.
+![Voice Console View](C:\Users\susmi\.gemini\antigravity-ide\brain\fe74c149-4498-486d-9a81-bcbb7dce7721\console_view_1786085582744.png)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 3. History
+A detailed view of past conversations and interactions with the AI.
+![History View](C:\Users\susmi\.gemini\antigravity-ide\brain\fe74c149-4498-486d-9a81-bcbb7dce7721\history_view_1786085595942.png)
 
-## Expanding the Oxlint configuration
+## Features & Core Components
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+- **Authentication & Onboarding (`/features/auth`)**: Secure login and smooth onboarding flow for new users.
+- **Voice Console (`/features/console`)**: Real-time voice interaction interface.
+- **Dashboard (`/features/dashboard`)**: Analytics and system overview.
+- **History & Logs (`/features/history`)**: Review past interactions.
+- **Agent Tools (`/features/tools`)**: Configuration and integrations for the agent's capabilities.
+- **Settings (`/features/settings`)**: Personalize and configure application preferences.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## Tech Stack
+
+The application is built on a modern React stack optimized for performance and developer experience:
+
+- **Framework**: React 19 + TypeScript
+- **Build Tool**: Vite (Lightning-fast HMR and build process)
+- **Routing**: React Router v7
+- **State Management**: Zustand (Global state) + React Query (Server state and caching)
+- **Styling**: Tailwind CSS + Framer Motion (Smooth page transitions & micro-animations)
+- **Forms & Validation**: React Hook Form + Zod
+- **Real-time Comms**: LiveKit Client for WebRTC audio streaming
+- **UI Components & Icons**: Radix/Custom UI, Lucide React, Recharts
+
+## Getting Started
+
+### Prerequisites
+- Node.js (v18 or higher recommended)
+- npm or yarn
+
+### Installation
+
+1. Install dependencies:
+```bash
+npm install
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+2. Start the development server:
+```bash
+npm run dev
+```
+The application will be accessible at `http://localhost:5173`.
+
+### Building for Production
+To build the application for production, run:
+```bash
+npm run build
+```
+This will generate optimized static assets in the `dist` directory.
+
+### Linting
+This project uses Oxlint for incredibly fast linting:
+```bash
+npm run lint
+```

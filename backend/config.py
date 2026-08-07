@@ -89,10 +89,6 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def get_settings_uncached() -> Settings:
-    """Create a fresh Settings instance (bypasses lru_cache — used in tests)."""
-    return Settings()
-
 
 # ── Voice name ↔ Cartesia UUID mapping ───────────────────────────────────────
 # These are the canonical voice options shown in the frontend Settings → Audio tab.

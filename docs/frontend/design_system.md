@@ -73,3 +73,11 @@ The primary interface should be centered on the screen within a "Card" component
 - **User Messages:** Colored `#22c55e` (Green) or prefixed with "🧑 You:".
 - **Agent Messages:** Colored `#6366f1` (Indigo/Blue) or prefixed with "🤖 Agent:".
 - Must auto-scroll smoothly when new messages arrive.
+
+## 5. Utilities & Data Formatting
+
+### Date & Time (IST Enforcement)
+All timestamps displayed in the UI (Dashboard, History, Settings) must use the standard `lib/dateUtils.ts` utility. This ensures consistent formatting across the application and forces conversion to Indian Standard Time (IST) for analytics and display reliability.
+
+- Use `formatDate(dateString)` for short formats (e.g. `Aug 6, 2026`).
+- Use `formatDateTime(dateString)` for detailed formats including time.

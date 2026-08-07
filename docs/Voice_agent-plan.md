@@ -14,7 +14,7 @@
 | **Long-term memory** | ❌ Skip for now |
 | **Embeddings** | ❌ Skip for now |
 | **MCP Tools** | ✅ Weather (Open-Meteo), Calculator, Web Search (DuckDuckGo), Notion Notes |
-| **Frontend** | ⏳ After backend is complete |
+| **Frontend** | ✅ Complete (React + Vite, with Latency Tracking HUD & Warmup Flow) |
 
 > [!IMPORTANT]
 > **ASR Changed**: Deepgram Nova-3 → **Groq Whisper** (`whisper-large-v3-turbo`).
@@ -177,6 +177,7 @@ voice_agent/
 | **Day 2** | Full ASR + VAD + TTS pipeline | Speak → **Groq Whisper** transcript → Cartesia reads back |
 | **Day 3** | LangGraph + Cerebras + short-term memory | Multi-turn conversation with name recall |
 | **Day 4** | MCP tools (weather, calc, search, Notion) + full e2e test | All 5 demo scripts pass via voice |
+| **Day 5** | Production React Frontend | Auth, Dashboard, DevMode Latency HUD, Post-login Warmup Flow |
 
 > [!IMPORTANT]
 > **Before Day 1 starts**: Sign up for **Groq** (https://console.groq.com), LiveKit Cloud, and Cartesia (all free), then add keys to `.env`.

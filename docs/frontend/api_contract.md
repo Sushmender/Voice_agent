@@ -82,6 +82,28 @@ Fetch the authenticated user's profile information.
 **Error Responses:**
 - `401 Unauthorized`: "Could not validate credentials"
 
+### 1.4 Warmup Status
+Fetch the current state of the backend pipeline warmup process. Used by the frontend immediately after login.
+
+- **URL:** `/auth/warmup-status`
+- **Method:** `GET`
+- **Headers:** 
+  - `Authorization: Bearer <access_token>`
+
+**Success Response (200 OK):**
+```json
+{
+  "done": false,
+  "step": "langgraph",
+  "elapsed": 1.25
+}
+```
+
+**Fields:**
+- `done`: Boolean indicating if the warmup process has completed.
+- `step`: Current active step string (e.g. `idle`, `starting`, `langgraph`, `groq`, `cerebras`, `done`).
+- `elapsed`: Time in seconds since warmup started.
+
 ---
 
 ## 2. LiveKit Token Routes
