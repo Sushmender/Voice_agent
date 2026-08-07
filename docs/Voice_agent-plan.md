@@ -115,7 +115,8 @@ voice_agent/
 │   ├── agent_worker.py          # LiveKit Agent entrypoint (auto-run by main)
 │   │
 │   ├── api/
-│   │   └── auth_routes.py       # FastAPI routes for signup, login, and profile
+│   │   ├── auth_routes.py       # FastAPI routes for signup, login, and profile
+│   │   └── oauth_routes.py      # OAuth (Google/GitHub) endpoints
 │   │
 │   ├── auth/
 │   │   ├── deps.py              # FastAPI dependencies (get_current_user)
@@ -129,7 +130,8 @@ voice_agent/
 │   │
 │   ├── pipeline/
 │   │   ├── latency_logger.py    # Latency tracking utilities
-│   │   └── voice_pipeline.py    # Pipecat pipeline: VAD→Groq STT→Agent→Cartesia TTS
+│   │   ├── voice_pipeline.py    # Pipecat pipeline: VAD→Groq STT→Agent→Cartesia TTS
+│   │   └── warmup.py            # Pre-warming logic for LLM & MCP connections
 │   │
 │   ├── agent/
 │   │   ├── graph.py             # LangGraph StateGraph definition
@@ -151,20 +153,20 @@ voice_agent/
 │
 ├── tests/
 │   ├── conftest.py              # Pytest fixtures
-│   ├── test_config.py
-│   ├── test_tools.py
-│   ├── test_agent.py
-│   ├── test_memory.py
-│   ├── test_pipeline.py
-│   ├── test_env_keys.py
-│   ├── test_e2e_pipeline1_llm.py
-│   └── test_e2e_pipeline2_latency.py
+│   ├── test_agent_graph.py      # LangGraph routing tests
+│   ├── test_session_memory.py   # Memory buffer tests
+│   ├── test_settings.py         # Config/Env tests
+│   └── test_voice_pipeline.py   # Voice pipeline stubs
 │
 └── docs/
     ├── Voice_agent-plan.md      # This project plan document
     ├── instructions.md          # End-to-end setup and testing guide
-    ├── tasks.md                 # Implementation task tracking checklist
-    └── Executive Summary.pdf    # Executive overview
+    ├── Executive Summary.pdf    # Executive overview
+    └── frontend/                # Detailed frontend architecture docs
+        ├── frontend_architecture.md
+        ├── design_system.md
+        ├── api_contract.md
+        └── ...
 ```
 
 ---
